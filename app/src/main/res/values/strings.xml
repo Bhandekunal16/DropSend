@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">DropSend</string>
+    <string name="app_tagline">Fast offline file sharing</string>
+    <string name="app_subtext">No account. No cloud. Just nearby sharing.</string>
+</resources>

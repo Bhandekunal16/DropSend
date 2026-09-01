@@ -1,0 +1,8 @@
+{
+  "name": "DropSend",
+  "description": "Fast offline fire-and-forget nearby file sharing over Wi-Fi and Bluetooth",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
