@@ -415,6 +415,14 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun testDirectNetworkStatusLabels() {
+        assertEquals("Ready for connection", com.example.presentation.components.DirectNetworkStatus.AVAILABLE.label)
+        assertEquals("Preparing network…", com.example.presentation.components.DirectNetworkStatus.STARTING.label)
+        assertEquals("Network unavailable", com.example.presentation.components.DirectNetworkStatus.UNAVAILABLE.label)
+        assertEquals("Unable to start network", com.example.presentation.components.DirectNetworkStatus.ERROR.label)
+    }
+
+    @Test
     fun testFormatFileSize() {
         assertEquals("0 B", formatFileSize(0))
         assertEquals("500 B", formatFileSize(500))

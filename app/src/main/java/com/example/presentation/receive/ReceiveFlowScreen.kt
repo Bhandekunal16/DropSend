@@ -70,6 +70,8 @@ import androidx.compose.material3.FilledTonalButton
 import com.example.data.connectivity.LocalHotspotInfo
 import com.example.domain.model.TransferFile
 import com.example.domain.model.formatFileSize
+import com.example.presentation.components.DirectNetworkCard
+import com.example.presentation.components.DirectNetworkStatus
 import com.example.presentation.components.FileItemCard
 import com.example.presentation.components.QrCodeDisplay
 import com.example.presentation.components.RadarPulseAnimation
@@ -227,77 +229,22 @@ fun ReceiveFlowScreen(
                         val ssid = localHotspotInfo.ssid.ifBlank { "DropSend-$localDeviceId" }
                         val pass = localHotspotInfo.passphrase.ifBlank { "dp_$localDeviceId" }
                         val directIp = localHotspotInfo.ipAddress.ifBlank { localIpAddresses.firstOrNull() ?: "192.168.43.1" }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
-                                .padding(12.dp)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.WifiTethering,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text(
-                                            text = "Direct Network: $ssid",
-                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                                            .clickable {
-                                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                                cm?.setPrimaryClip(ClipData.newPlainText("Direct Connection", "$directIp:8888"))
-                                                Toast.makeText(context, "Copied IP ($directIp) to clipboard", Toast.LENGTH_SHORT).show()
-                                            }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Text(
-                                                text = "IP: $directIp",
-                                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                            Icon(
-                                                imageVector = Icons.Default.ContentCopy,
-                                                contentDescription = "Copy",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                if (pass.isNotBlank()) {
-                                    Text(
-                                        text = "Wi-Fi Passphrase: $pass",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
+                        val netStatus = if (localHotspotInfo.errorMessage != null) {
+                            DirectNetworkStatus.ERROR
+                        } else if (localHotspotInfo.isActive || ssid.isNotBlank()) {
+                            DirectNetworkStatus.AVAILABLE
+                        } else {
+                            DirectNetworkStatus.STARTING
                         }
+
+                        DirectNetworkCard(
+                            ssid = ssid,
+                            ipAddress = directIp,
+                            passphrase = pass,
+                            status = netStatus,
+                            errorMessage = localHotspotInfo.errorMessage,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
                     } else {
                         // TAB 1: RADAR DISCOVERY (SAME WI-FI / BLE)
                         RadarPulseAnimation(
