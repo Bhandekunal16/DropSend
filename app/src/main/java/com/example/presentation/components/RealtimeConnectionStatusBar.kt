@@ -22,7 +22,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -40,7 +42,6 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.filled.WifiTethering
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -275,7 +276,7 @@ fun RealtimeConnectionStatusBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -293,11 +294,11 @@ fun RealtimeConnectionStatusBar(
                 }
 
                 if (showRadioPills) {
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     // Auxiliary Glanceable Radio Indicators
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (isHotspotActive) {
                             RadioBadge(
@@ -336,7 +337,7 @@ fun RealtimeConnectionStatusBar(
 }
 
 /**
- * The primary color-coded connection state chip with pulsating dot animation.
+ * The primary color-coded connection state chip with pulsating dot animation and generous spacing.
  */
 @Composable
 fun ConnectionStateChip(
@@ -361,16 +362,16 @@ fun ConnectionStateChip(
 
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(22.dp))
             .background(visualState.containerColor)
-            .border(1.dp, animatedBorderColor, RoundedCornerShape(20.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .border(1.dp, animatedBorderColor, RoundedCornerShape(22.dp))
+            .padding(horizontal = 14.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Status Indicator Dot / Icon
+        // Status Indicator Dot
         Box(
             modifier = Modifier
-                .size(10.dp)
+                .size(8.dp)
                 .scale(if (visualState.isPulsing) pulseScale else 1f)
                 .clip(CircleShape)
                 .background(visualState.dotColor)
@@ -378,6 +379,7 @@ fun ConnectionStateChip(
 
         Spacer(modifier = Modifier.width(8.dp))
 
+        // Transport/State Icon
         Icon(
             imageVector = visualState.icon,
             contentDescription = null,
@@ -385,9 +387,13 @@ fun ConnectionStateChip(
             modifier = Modifier.size(15.dp)
         )
 
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
-        Column {
+        // Single-line Title and Subtitle with clean breathing room
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             Text(
                 text = visualState.title,
                 fontSize = 12.sp,
@@ -398,11 +404,17 @@ fun ConnectionStateChip(
             )
 
             if (!visualState.subtitle.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .size(3.dp)
+                        .clip(CircleShape)
+                        .background(visualState.contentColor.copy(alpha = 0.5f))
+                )
                 Text(
                     text = visualState.subtitle,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
-                    color = visualState.contentColor.copy(alpha = 0.8f),
+                    color = visualState.contentColor.copy(alpha = 0.85f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -427,21 +439,21 @@ private fun RadioBadge(
 
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(bgColor)
-            .padding(horizontal = 7.dp, vertical = 4.dp),
+            .padding(horizontal = 9.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = contentColor,
-            modifier = Modifier.size(12.dp)
+            modifier = Modifier.size(13.dp)
         )
         Text(
             text = label,
-            fontSize = 10.sp,
+            fontSize = 10.5.sp,
             fontWeight = FontWeight.SemiBold,
             color = contentColor
         )
