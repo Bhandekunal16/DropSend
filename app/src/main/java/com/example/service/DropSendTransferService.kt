@@ -26,6 +26,12 @@ class DropSendTransferService : Service() {
         const val ACTION_STOP = "com.example.dropsend.STOP_SERVICE"
         const val ACTION_CANCEL = "com.example.dropsend.CANCEL_TRANSFER"
 
+        val cancelEvents = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(
+            replay = 0,
+            extraBufferCapacity = 1,
+            onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+        )
+
         fun start(context: Context) {
             val intent = Intent(context, DropSendTransferService::class.java).apply {
                 action = ACTION_START
@@ -78,7 +84,7 @@ class DropSendTransferService : Service() {
                 stopSelf()
             }
             ACTION_CANCEL -> {
-                // Cancel event broadcast
+                cancelEvents.tryEmit(Unit)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }

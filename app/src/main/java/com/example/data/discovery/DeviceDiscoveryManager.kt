@@ -14,6 +14,10 @@ import kotlinx.coroutines.launch
 
 class DeviceDiscoveryManager(private val context: Context) {
 
+    companion object {
+        private const val PEER_EXPIRY_MS = 15_000L // Remove peers not heard from for 15s
+    }
+
     val bleDiscovery = BleDiscoveryService(context)
     val lanDiscovery = LanDiscoveryService(context)
     val wifiP2pManager = WifiP2pDirectManager(context)
@@ -24,9 +28,26 @@ class DeviceDiscoveryManager(private val context: Context) {
     val nearbyDevices: StateFlow<List<DiscoveredDevice>> = _nearbyDevices.asStateFlow()
 
     private var combineJob: Job? = null
+    private var cleanupJob: Job? = null
 
     init {
         startCombining()
+        startPeriodicCleanup()
+    }
+
+    private fun startPeriodicCleanup() {
+        cleanupJob?.cancel()
+        cleanupJob = scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(4000)
+                val now = System.currentTimeMillis()
+                val current = _nearbyDevices.value
+                val fresh = current.filter { (now - it.lastSeenTimestamp) < PEER_EXPIRY_MS }
+                if (fresh.size != current.size) {
+                    _nearbyDevices.value = fresh
+                }
+            }
+        }
     }
 
     private fun startCombining() {
@@ -36,32 +57,50 @@ class DeviceDiscoveryManager(private val context: Context) {
                 bleDiscovery.discoveredDevices,
                 wifiP2pManager.discoveredPeers
             ) { lanMap, bleMap, p2pList ->
+                val now = System.currentTimeMillis()
                 val merged = mutableMapOf<String, DiscoveredDevice>()
 
                 // 1. LAN Wi-Fi devices (Highest priority for direct IP)
                 lanMap.values.forEach { dev ->
-                    merged[dev.id] = dev
+                    if (now - dev.lastSeenTimestamp < PEER_EXPIRY_MS) {
+                        merged[dev.id] = dev
+                    }
                 }
 
                 // 2. Wi-Fi Direct devices
                 p2pList.forEach { dev ->
-                    if (!merged.containsKey(dev.id)) {
-                        merged[dev.id] = dev
+                    if (now - dev.lastSeenTimestamp < PEER_EXPIRY_MS) {
+                        val existing = merged[dev.id]
+                        if (existing == null) {
+                            merged[dev.id] = dev
+                        } else if (existing.ipAddress == null && dev.ipAddress != null) {
+                            merged[dev.id] = existing.copy(
+                                ipAddress = dev.ipAddress,
+                                port = dev.port,
+                                transportType = TransportType.WIFI_DIRECT
+                            )
+                        }
                     }
                 }
 
                 // 3. BLE devices (Bluetooth fallback or discovery trigger)
                 bleMap.values.forEach { dev ->
-                    val existing = merged[dev.id]
-                    if (existing == null) {
-                        merged[dev.id] = dev
-                    } else if (existing.bluetoothAddress == null && dev.bluetoothAddress != null) {
-                        // Enrich existing LAN device with Bluetooth info if available
-                        merged[dev.id] = existing.copy(bluetoothAddress = dev.bluetoothAddress)
+                    if (now - dev.lastSeenTimestamp < PEER_EXPIRY_MS) {
+                        val existing = merged[dev.id]
+                        if (existing == null) {
+                            merged[dev.id] = dev
+                        } else if (existing.bluetoothAddress == null && dev.bluetoothAddress != null) {
+                            // Enrich existing LAN / Direct device with Bluetooth address for fallback
+                            merged[dev.id] = existing.copy(bluetoothAddress = dev.bluetoothAddress)
+                        }
                     }
                 }
 
-                merged.values.toList().sortedByDescending { it.transportType == TransportType.LOCAL_WIFI || it.transportType == TransportType.WIFI_DIRECT }
+                merged.values.toList().sortedWith(
+                    compareByDescending<DiscoveredDevice> { it.transportType == TransportType.LOCAL_WIFI }
+                        .thenByDescending { it.transportType == TransportType.WIFI_DIRECT }
+                        .thenByDescending { it.lastSeenTimestamp }
+                )
             }.collect { list ->
                 _nearbyDevices.value = list
             }

@@ -83,15 +83,17 @@ DropSend is an offline, peer-to-peer (P2P), direct device-to-device file transfe
   - `deriveVerificationCode(key, salt)`: Derives a 4-digit human-verifiable security code displayed on both sender and receiver screens.
 
 ### 3.4 Transport & Transfer Protocol Subsystem
-- **Component:** `TcpTransferTransport.kt`, `BluetoothTransferTransport.kt`, `TransferTransport.kt`
+- **Component:** `TcpTransferTransport.kt`, `BluetoothTransferTransport.kt`, `TransferTransport.kt`, `TransferStateMachine.kt`, `ProtocolMessage.kt`
 - **Functions:**
-  - `TransferProtocolMessage`: Defines framed protocol messages (`HELLO`, `TRANSFER_REQUEST`, `TRANSFER_ACCEPT`, `FILE_START`, `CHUNK`, `CHUNK_ACK`, `FILE_COMPLETE`, `PAUSE`, `RESUME`, `CANCEL`, `CLOSE`).
-  - `sendFiles()` / `receiveFiles()`: Breaks files into size-optimized chunks (128 KB for Wi-Fi LAN / Wi-Fi Direct, 32 KB for Bluetooth SPP).
-  - `calculateSpeedAndEta()`: Calculates rolling exponential moving average of throughput (MB/s) and estimated time of arrival.
+  - `TransferStateMachine`: Formalized deterministic state transition validation (`IDLE`, `DISCOVERING`, `DEVICE_FOUND`, `CONNECTING`, `AUTHENTICATING`, `WAITING_FOR_ACCEPT`, `TRANSFERRING`, `VERIFYING`, `COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`, `DISCONNECTED`).
+  - `ProtocolMessage`: Versioned framing (`PROTOCOL_VERSION = 2`, `MIN_COMPATIBLE_VERSION = 1`) with safety limits (`MAX_CHUNK_SIZE = 1MB`, `MAX_METADATA_LENGTH = 64KB`).
+  - `sendFiles()` / `receiveFiles()`: Breaks files into size-optimized chunks (128 KB for Wi-Fi LAN / Wi-Fi Direct, 32 KB for Bluetooth SPP) with chunk sequence numbers, monotonic ACK offsets, and disk write exception handling.
+  - `startSpeedTracker()`: Exponential Moving Average (EMA) smoothed throughput calculation (MB/s) and rolling estimated time of arrival (ETA).
 
 ### 3.5 Storage & Persistence Subsystem
-- **Component:** `StorageManager.kt`, `AppDatabase.kt`, `TransferHistoryDao.kt`, `TransferHistoryRepository.kt`
+- **Component:** `StorageManager.kt`, `AppDatabase.kt`, `TransferHistoryDao.kt`, `TransferHistoryRepository.kt`, `DropSendError.kt`
 - **Functions:**
+  - `DropSendError`: Unified, domain-wide typed error taxonomy (`DiscoveryFailed`, `PermissionDenied`, `ConnectionFailed`, `StorageFull`, `StorageWriteFailed`, `ChecksumMismatch`, `ProtocolError`, `UnsupportedProtocol`, `Timeout`, `Cancelled`).
   - `resolveFileMetadata(uris)`: Extracts filename, MIME type, and byte length from `ContentResolver`.
   - `saveReceivedFile(tempFile, metadata)`: Streams validated temporary cache files directly into the Android public `Downloads/DropSend` directory using `MediaStore.Downloads` collection.
   - `insertTransfer()` / `getAllTransfers()`: Records completion timestamps, sender/receiver names, total size, file count, and status in Room SQLite database.
