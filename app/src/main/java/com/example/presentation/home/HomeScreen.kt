@@ -38,11 +38,13 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MultipleStop
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -65,15 +67,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.connectivity.ConnectivityState
+import com.example.domain.model.DiscoveredDevice
 import com.example.presentation.components.ConnectivityStatusRow
+import com.example.presentation.components.EmulatorTestBottomSheet
 import com.example.presentation.components.ThemeSelectionSheet
 import com.example.ui.theme.DarkModePreference
 import com.example.ui.theme.ThemePalette
-
-import androidx.compose.material.icons.filled.Science
-import androidx.compose.material3.FilledTonalButton
-import com.example.domain.model.DiscoveredDevice
-import com.example.presentation.components.EmulatorTestBottomSheet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,82 +89,89 @@ fun HomeScreen(
     onLaunchSenderSimulation: (DiscoveredDevice, Float) -> Unit = { _, _ -> },
     onLaunchReceiverSimulation: (String, Float) -> Unit = { _, _ -> },
     onPopulateDemoPeers: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var showThemeSheet by remember { mutableStateOf(false) }
     var showInfoDialog by remember { mutableStateOf(false) }
     var showEmulatorSheet by remember { mutableStateOf(false) }
 
     // Open system multi-file picker
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris ->
-        if (uris.isNotEmpty()) {
-            onFilesSelected(uris)
+    val filePickerLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenMultipleDocuments(),
+        ) { uris ->
+            if (uris.isNotEmpty()) {
+                onFilesSelected(uris)
+            }
         }
-    }
 
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
     ) {
         // Scrollable content area
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
             // Header Section
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp, bottom = 8.dp)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp, bottom = 8.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.primary),
-                            contentAlignment = Alignment.Center
+                            modifier =
+                                Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MultipleStop,
                                 contentDescription = "DropSend Logo",
                                 tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.dp),
                             )
                         }
 
                         Column {
                             Text(
                                 text = "DropSend",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = (-0.5).sp,
-                                    fontSize = 24.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onBackground
+                                style =
+                                    MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = (-0.5).sp,
+                                        fontSize = 24.sp,
+                                    ),
+                                color = MaterialTheme.colorScheme.onBackground,
                             )
                             Text(
                                 text = "Fast offline file sharing",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 13.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style =
+                                    MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 13.sp,
+                                    ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -173,69 +179,56 @@ fun HomeScreen(
                     // Header Action Buttons
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         // History Button
                         IconButton(
                             onClick = onShowHistory,
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-                                .testTag("history_button")
+                            modifier =
+                                Modifier
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                                    .testTag("history_button"),
                         ) {
                             Icon(
                                 imageVector = Icons.Default.History,
                                 contentDescription = "Transfer History",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(20.dp),
                             )
                         }
 
                         // Testbench / Simulator Button
                         IconButton(
                             onClick = { showEmulatorSheet = true },
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f))
-                                .testTag("emulator_header_button")
+                            modifier =
+                                Modifier
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f))
+                                    .testTag("emulator_header_button"),
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Science,
                                 contentDescription = "Test Simulator",
                                 tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        // Theme Switcher Button
-                        IconButton(
-                            onClick = { showThemeSheet = true },
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
-                                .testTag("theme_selector_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Palette,
-                                contentDescription = "Change Theme",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(20.dp),
                             )
                         }
 
                         // Info Button
                         IconButton(
                             onClick = { showInfoDialog = true },
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-                                .testTag("info_button")
+                            modifier =
+                                Modifier
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                                    .testTag("info_button"),
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Info,
                                 contentDescription = "About DropSend",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(20.dp),
                             )
                         }
                     }
@@ -246,62 +239,67 @@ fun HomeScreen(
 
             // Main Content: Radar / Visual Center
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(280.dp),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(280.dp),
+                contentAlignment = Alignment.Center,
             ) {
                 // Radar Rings Animation
                 DecorativeRadarRings(
                     modifier = Modifier.fillMaxSize(),
-                    ringColor = MaterialTheme.colorScheme.primary
+                    ringColor = MaterialTheme.colorScheme.primary,
                 )
 
                 // Central ID Bubble with Nearby Indicator
                 Box(
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(136.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), CircleShape),
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(136.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), CircleShape),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(
                                 text = "YOUR ID",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 2.sp,
-                                    fontSize = 10.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                style =
+                                    MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 2.sp,
+                                        fontSize = 10.sp,
+                                    ),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                             )
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
                                 text = localDeviceId,
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                style =
+                                    MaterialTheme.typography.titleMedium.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                    ),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
                             )
                         }
                     }
 
                     // Tiny "Active" Indicator Dot on top right
                     Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .size(18.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                            .border(2.dp, MaterialTheme.colorScheme.background, CircleShape)
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                                .border(2.dp, MaterialTheme.colorScheme.background, CircleShape),
                     )
                 }
             }
@@ -309,56 +307,61 @@ fun HomeScreen(
             // Minimal Tagline
             Text(
                 text = "No account. No cloud.\nDirect device-to-device transfer.",
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    lineHeight = 20.sp,
-                    fontSize = 14.sp
-                ),
+                style =
+                    MaterialTheme.typography.bodyMedium.copy(
+                        lineHeight = 20.sp,
+                        fontSize = 14.sp,
+                    ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
+                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
             )
 
             // Primary Action Buttons
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 340.dp)
-                    .padding(bottom = 20.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 340.dp)
+                        .padding(bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 // Send Files Button
                 Button(
                     onClick = {
                         filePickerLauncher.launch(arrayOf("*/*"))
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .testTag("send_files_button"),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .testTag("send_files_button"),
                     shape = RoundedCornerShape(28.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                        horizontalArrangement = Arrangement.Center,
                     ) {
                         Icon(
                             imageVector = Icons.Default.ArrowUpward,
                             contentDescription = null,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(20.dp),
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "Send Files",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 17.sp
-                            )
+                            style =
+                                MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 17.sp,
+                                ),
                         )
                     }
                 }
@@ -366,35 +369,38 @@ fun HomeScreen(
                 // Receive Files Button
                 Button(
                     onClick = onReceiveClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .testTag("receive_files_button"),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .testTag("receive_files_button"),
                     shape = RoundedCornerShape(28.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp)
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp),
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                        horizontalArrangement = Arrangement.Center,
                     ) {
                         Icon(
                             imageVector = Icons.Default.ArrowDownward,
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "Receive Files",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 17.sp
-                            ),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            style =
+                                MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 17.sp,
+                                ),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
                     }
                 }
@@ -402,23 +408,24 @@ fun HomeScreen(
                 // Emulator / Test Sandbox Button
                 FilledTonalButton(
                     onClick = { showEmulatorSheet = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("emulator_testbench_button"),
-                    shape = RoundedCornerShape(24.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("emulator_testbench_button"),
+                    shape = RoundedCornerShape(24.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Default.Science,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Test Transfer Simulator (Virtual Peer)",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }
@@ -426,42 +433,44 @@ fun HomeScreen(
 
         // Bottom Connectivity Dock / Bar
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .navigationBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 18.dp)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 18.dp),
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // Connectivity Chips (Bluetooth & Wi-Fi)
                     ConnectivityStatusRow(
                         isBluetoothOn = connectivityState.isBluetoothOn,
-                        isWifiOn = connectivityState.isWifiOn
+                        isWifiOn = connectivityState.isWifiOn,
                     )
 
                     // Secondary Theme / Options Quick Pill
                     Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), CircleShape)
-                            .clickable { showThemeSheet = true },
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), CircleShape)
+                                .clickable { showThemeSheet = true },
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = Icons.Default.Tune,
                             contentDescription = "Themes and Options",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(16.dp),
                         )
                     }
                 }
@@ -470,10 +479,11 @@ fun HomeScreen(
 
                 // Bottom Drag / Balance Handle
                 Box(
-                    modifier = Modifier
-                        .size(width = 44.dp, height = 4.5.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                    modifier =
+                        Modifier
+                            .size(width = 44.dp, height = 4.5.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
                 )
             }
         }
@@ -486,7 +496,7 @@ fun HomeScreen(
             darkModePreference = darkModePreference,
             onPaletteSelected = onPaletteSelected,
             onDarkModeSelected = onDarkModeSelected,
-            onDismiss = { showThemeSheet = false }
+            onDismiss = { showThemeSheet = false },
         )
     }
 
@@ -496,7 +506,7 @@ fun HomeScreen(
             onLaunchSenderSimulation = onLaunchSenderSimulation,
             onLaunchReceiverSimulation = onLaunchReceiverSimulation,
             onPopulateDemoPeers = onPopulateDemoPeers,
-            onDismiss = { showEmulatorSheet = false }
+            onDismiss = { showEmulatorSheet = false },
         )
     }
 
@@ -509,12 +519,12 @@ fun HomeScreen(
                     Icon(
                         imageVector = Icons.Default.HelpOutline,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "About DropSend",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     )
                 }
             },
@@ -522,12 +532,12 @@ fun HomeScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "DropSend provides high-speed, direct file transfer without internet, cloud accounts, or size limits.",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
                         text = "• Uses Wi-Fi LAN / Hotspot at high speeds (up to 100+ MB/s)\n• Bluetooth LE fallback if Wi-Fi is unavailable\n• AES-256 session encryption with 4-digit code verification\n• Direct IP connection for restricted networks",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             },
@@ -535,7 +545,7 @@ fun HomeScreen(
                 TextButton(onClick = { showInfoDialog = false }) {
                     Text("Close", color = MaterialTheme.colorScheme.primary)
                 }
-            }
+            },
         )
     }
 }
@@ -543,17 +553,18 @@ fun HomeScreen(
 @Composable
 private fun DecorativeRadarRings(
     modifier: Modifier = Modifier,
-    ringColor: Color
+    ringColor: Color,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "sleek_rings")
     val pulseRatio by infiniteTransition.animateFloat(
         initialValue = 0.92f,
         targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_scale"
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(3000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+        label = "pulse_scale",
     )
 
     Canvas(modifier = modifier) {
@@ -564,22 +575,28 @@ private fun DecorativeRadarRings(
         drawCircle(
             color = ringColor.copy(alpha = 0.08f),
             radius = 135.dp.toPx() * pulseRatio,
-            center = androidx.compose.ui.geometry.Offset(centerX, centerY),
-            style = Stroke(width = 1.2.dp.toPx())
+            center =
+                androidx.compose.ui.geometry
+                    .Offset(centerX, centerY),
+            style = Stroke(width = 1.2.dp.toPx()),
         )
 
         drawCircle(
             color = ringColor.copy(alpha = 0.12f),
             radius = 100.dp.toPx() * (2f - pulseRatio),
-            center = androidx.compose.ui.geometry.Offset(centerX, centerY),
-            style = Stroke(width = 1.2.dp.toPx())
+            center =
+                androidx.compose.ui.geometry
+                    .Offset(centerX, centerY),
+            style = Stroke(width = 1.2.dp.toPx()),
         )
 
         drawCircle(
             color = ringColor.copy(alpha = 0.18f),
             radius = 75.dp.toPx(),
-            center = androidx.compose.ui.geometry.Offset(centerX, centerY),
-            style = Stroke(width = 1.dp.toPx())
+            center =
+                androidx.compose.ui.geometry
+                    .Offset(centerX, centerY),
+            style = Stroke(width = 1.dp.toPx()),
         )
     }
 }
