@@ -442,7 +442,6 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Bottom Drag / Balance Handle
                 Box(
                     modifier =
                         Modifier
@@ -454,7 +453,6 @@ fun HomeScreen(
         }
     }
 
-    // Theme Selection BottomSheet
     if (showThemeSheet) {
         ThemeSelectionSheet(
             selectedPalette = currentPalette,
@@ -465,7 +463,6 @@ fun HomeScreen(
         )
     }
 
-    // Emulator / Test Sandbox BottomSheet
     if (showEmulatorSheet) {
         EmulatorTestBottomSheet(
             onLaunchSenderSimulation = onLaunchSenderSimulation,
@@ -475,7 +472,6 @@ fun HomeScreen(
         )
     }
 
-    // About Info Dialog
     if (showInfoDialog) {
         AlertDialog(
             onDismissRequest = { showInfoDialog = false },
@@ -536,7 +532,6 @@ private fun DecorativeRadarRings(
         val centerX = size.width / 2f
         val centerY = size.height / 2f
 
-        // 3 concentric subtle rings
         drawCircle(
             color = ringColor.copy(alpha = 0.08f),
             radius = 135.dp.toPx() * pulseRatio,
