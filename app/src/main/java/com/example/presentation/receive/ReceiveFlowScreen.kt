@@ -200,9 +200,7 @@ fun ReceiveFlowScreen(
 
                         QrCodeDisplay(
                             content = qrPayload,
-                            sizeDp = 210.dp,
-                            foregroundColor = MaterialTheme.colorScheme.onSurface,
-                            backgroundColor = Color.White
+                            sizeDp = 210.dp
                         )
 
                         Spacer(modifier = Modifier.height(14.dp))

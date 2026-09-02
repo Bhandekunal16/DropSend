@@ -210,5 +210,6 @@ DropSend is an offline, peer-to-peer (P2P), direct device-to-device file transfe
   - Filename collision resolution & Unicode path sanitization
   - Large file offset and size formatting (> 4 GB)
   - `StorageManager` temp file caching and storage space pre-validation
+  - High-contrast QR bitmap generation with pure opaque modules, quiet zone isolation, and zero theme tinting
 - **Compilation Status:** Clean build with Android SDK 36.
 

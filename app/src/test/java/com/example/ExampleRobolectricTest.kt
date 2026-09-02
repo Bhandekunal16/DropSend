@@ -66,5 +66,58 @@ class ExampleRobolectricTest {
       }
     }
   }
+
+  @Test
+  fun `test qr code bitmap generation with high contrast and valid dimensions`() {
+    val payload = "dropsend://connect?ssid=DropSend-A1B2&pass=dp_A1B2&ip=192.168.43.1&port=8888&dev=Pixel+8&id=A1B2"
+    val bitmap = com.example.presentation.components.generateQrBitmap(
+      content = payload,
+      dimension = 512,
+      foregroundColor = 0xFF000000.toInt(),
+      backgroundColor = 0xFFFFFFFF.toInt(),
+      margin = 2
+    )
+
+    org.junit.Assert.assertNotNull("QR bitmap should not be null", bitmap)
+    assertEquals(512, bitmap!!.width)
+    assertEquals(512, bitmap.height)
+
+    // Verify presence of both foreground (black) and background (white) pixels
+    var blackPixelFound = false
+    var whitePixelFound = false
+
+    val pixels = IntArray(512 * 512)
+    bitmap.getPixels(pixels, 0, 512, 0, 0, 512, 512)
+
+    for (pixel in pixels) {
+      // Ensure full opacity (alpha channel is 0xFF)
+      val alpha = (pixel shr 24) and 0xFF
+      assertEquals("Pixel must be 100% opaque", 0xFF, alpha)
+
+      if (pixel == 0xFF000000.toInt()) {
+        blackPixelFound = true
+      } else if (pixel == 0xFFFFFFFF.toInt()) {
+        whitePixelFound = true
+      }
+    }
+
+    assertTrue("QR code must contain black modules", blackPixelFound)
+    assertTrue("QR code must contain white quiet-zone modules", whitePixelFound)
+
+    // Corner quiet zone checks: Top-left and top-right quiet zone margin pixels must be pure white
+    assertEquals("Quiet zone top-left corner must be white", 0xFFFFFFFF.toInt(), bitmap.getPixel(0, 0))
+    assertEquals("Quiet zone top-right corner must be white", 0xFFFFFFFF.toInt(), bitmap.getPixel(511, 0))
+    assertEquals("Quiet zone bottom-left corner must be white", 0xFFFFFFFF.toInt(), bitmap.getPixel(0, 511))
+    assertEquals("Quiet zone bottom-right corner must be white", 0xFFFFFFFF.toInt(), bitmap.getPixel(511, 511))
+  }
+
+  @Test
+  fun `test qr code returns null on blank or empty input`() {
+    val blankBitmap = com.example.presentation.components.generateQrBitmap("")
+    org.junit.Assert.assertNull("Blank content should return null", blankBitmap)
+
+    val whitespaceBitmap = com.example.presentation.components.generateQrBitmap("   ")
+    org.junit.Assert.assertNull("Whitespace content should return null", whitespaceBitmap)
+  }
 }
 
