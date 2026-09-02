@@ -101,6 +101,10 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         themePreferences.setDarkModePreference(mode)
     }
 
+    fun refreshConnectivity() {
+        connectivityMonitor.updateState()
+    }
+
     private val _uiState = MutableStateFlow(
         UiState(
             localDeviceId = SessionCrypto.generateTemporaryIdentity(),

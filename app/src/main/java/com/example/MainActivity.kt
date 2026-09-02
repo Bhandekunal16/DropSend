@@ -113,6 +113,7 @@ fun DropSendApp(viewModel: DropSendViewModel) {
 
     val requestPermissions = rememberDropSendPermissionState(context) {
         // Permissions granted
+        viewModel.refreshConnectivity()
     }
 
     LaunchedEffect(Unit) {
