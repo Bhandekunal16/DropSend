@@ -95,7 +95,6 @@ fun HomeScreen(
     var showInfoDialog by remember { mutableStateOf(false) }
     var showEmulatorSheet by remember { mutableStateOf(false) }
 
-    // Open system multi-file picker
     val filePickerLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenMultipleDocuments(),
@@ -111,7 +110,6 @@ fun HomeScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
     ) {
-        // Scrollable content area
         Column(
             modifier =
                 Modifier
@@ -122,7 +120,6 @@ fun HomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Header Section
             Column(
                 modifier =
                     Modifier
@@ -176,12 +173,10 @@ fun HomeScreen(
                         }
                     }
 
-                    // Header Action Buttons
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        // History Button
                         IconButton(
                             onClick = onShowHistory,
                             modifier =
@@ -198,24 +193,6 @@ fun HomeScreen(
                             )
                         }
 
-                        // Testbench / Simulator Button
-                        IconButton(
-                            onClick = { showEmulatorSheet = true },
-                            modifier =
-                                Modifier
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f))
-                                    .testTag("emulator_header_button"),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Science,
-                                contentDescription = "Test Simulator",
-                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-
-                        // Info Button
                         IconButton(
                             onClick = { showInfoDialog = true },
                             modifier =
@@ -237,7 +214,6 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Main Content: Radar / Visual Center
             Box(
                 modifier =
                     Modifier
@@ -245,13 +221,11 @@ fun HomeScreen(
                         .height(280.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                // Radar Rings Animation
                 DecorativeRadarRings(
                     modifier = Modifier.fillMaxSize(),
                     ringColor = MaterialTheme.colorScheme.primary,
                 )
 
-                // Central ID Bubble with Nearby Indicator
                 Box(
                     contentAlignment = Alignment.Center,
                 ) {
@@ -291,7 +265,6 @@ fun HomeScreen(
                         }
                     }
 
-                    // Tiny "Active" Indicator Dot on top right
                     Box(
                         modifier =
                             Modifier
@@ -304,7 +277,6 @@ fun HomeScreen(
                 }
             }
 
-            // Minimal Tagline
             Text(
                 text = "No account. No cloud.\nDirect device-to-device transfer.",
                 style =
@@ -317,7 +289,6 @@ fun HomeScreen(
                 modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
             )
 
-            // Primary Action Buttons
             Column(
                 modifier =
                     Modifier
@@ -327,7 +298,6 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // Send Files Button
                 Button(
                     onClick = {
                         filePickerLauncher.launch(arrayOf("*/*"))
@@ -366,7 +336,6 @@ fun HomeScreen(
                     }
                 }
 
-                // Receive Files Button
                 Button(
                     onClick = onReceiveClick,
                     modifier =
@@ -405,7 +374,6 @@ fun HomeScreen(
                     }
                 }
 
-                // Emulator / Test Sandbox Button
                 FilledTonalButton(
                     onClick = { showEmulatorSheet = true },
                     modifier =
@@ -431,7 +399,6 @@ fun HomeScreen(
             }
         }
 
-        // Bottom Connectivity Dock / Bar
         Box(
             modifier =
                 Modifier
@@ -450,13 +417,11 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Connectivity Chips (Bluetooth & Wi-Fi)
                     ConnectivityStatusRow(
                         isBluetoothOn = connectivityState.isBluetoothOn,
                         isWifiOn = connectivityState.isWifiOn,
                     )
 
-                    // Secondary Theme / Options Quick Pill
                     Box(
                         modifier =
                             Modifier
