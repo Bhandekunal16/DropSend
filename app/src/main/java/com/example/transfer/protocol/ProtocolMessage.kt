@@ -243,6 +243,10 @@ sealed class ProtocolMessage {
                 null
             }
         }
+
+        fun writeToStream(output: OutputStream, message: ProtocolMessage) {
+            message.writeToStream(output)
+        }
     }
 
     abstract fun writeToStream(output: OutputStream)

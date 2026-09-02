@@ -584,14 +584,18 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
             is ProtocolMessage.AuthHandshake -> {
                 // Receiver receives sender's public key
                 val peerPubKeyBytes = Base64.decode(message.publicKeyBase64, Base64.NO_WRAP)
-                sessionKey = SessionCrypto.deriveSharedSessionKey(ecKeyPair.private, peerPubKeyBytes)
                 sessionToken = message.sessionToken
+                sessionKey = SessionCrypto.deriveSharedSessionKey(
+                    ecKeyPair.private,
+                    peerPubKeyBytes,
+                    salt = sessionToken.toByteArray(Charsets.UTF_8)
+                )
                 val myPubKeyBase64 = Base64.encodeToString(ecKeyPair.public.encoded, Base64.NO_WRAP)
 
                 val verificationCode = SessionCrypto.deriveVerificationCode(
-                    message.senderId + _uiState.value.localDeviceId,
-                    sessionKey,
-                    sessionToken
+                    sessionId = sessionToken,
+                    sharedKeyBytes = sessionKey,
+                    additionalContext = message.senderId + _uiState.value.localDeviceId
                 )
 
                 transport.send(
@@ -616,7 +620,31 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
             is ProtocolMessage.AuthHandshakeAck -> {
                 // Sender completes ECDH exchange
                 val peerPubKeyBytes = Base64.decode(message.publicKeyBase64, Base64.NO_WRAP)
-                sessionKey = SessionCrypto.deriveSharedSessionKey(ecKeyPair.private, peerPubKeyBytes)
+                sessionKey = SessionCrypto.deriveSharedSessionKey(
+                    ecKeyPair.private,
+                    peerPubKeyBytes,
+                    salt = sessionToken.toByteArray(Charsets.UTF_8)
+                )
+
+                val expectedCode = SessionCrypto.deriveVerificationCode(
+                    sessionId = sessionToken,
+                    sharedKeyBytes = sessionKey,
+                    additionalContext = _uiState.value.localDeviceId + message.receiverId
+                )
+
+                if (expectedCode != message.verificationCode) {
+                    Log.w(TAG, "Verification code mismatch: potential MITM attack or key desync!")
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(
+                                sessionState = SessionState.FAILED,
+                                errorMessage = "Security verification failed. Session could not be verified securely."
+                            )
+                        }
+                    }
+                    cleanupTransport()
+                    return
+                }
 
                 val totalSize = _uiState.value.selectedFiles.sumOf { it.sizeBytes }
                 val metadataList = _uiState.value.selectedFiles.map { f ->

@@ -42,6 +42,58 @@ class StorageManager(private val context: Context) {
         private const val TAG = "StorageManager"
         const val DROPSEND_FOLDER_NAME = "DropSend"
         private const val STORAGE_SAFETY_MARGIN_BYTES = 50L * 1024 * 1024 // 50 MB buffer
+
+        /**
+         * Sanitizes a filename to protect against path traversal (../), null bytes, and illegal filesystem characters
+         */
+        fun sanitizeFileName(rawName: String): String {
+            var clean = rawName
+                .replace("\\", "/")
+                .substringAfterLast("/")
+                .replace("\u0000", "")
+                .trim()
+
+            // Replace illegal filesystem characters: : * ? " < > |
+            clean = clean.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+
+            // Prevent hidden files or relative path navigations
+            while (clean.startsWith(".")) {
+                clean = clean.removePrefix(".")
+            }
+
+            if (clean.isBlank()) {
+                clean = "transferred_file_${System.currentTimeMillis()}"
+            }
+
+            // Limit name length to 200 chars to avoid OS length limit issues
+            if (clean.length > 200) {
+                val ext = clean.substringAfterLast('.', "")
+                val base = clean.substringBeforeLast('.')
+                clean = if (ext.isNotEmpty()) "${base.take(190)}.$ext" else base.take(200)
+            }
+
+            return clean
+        }
+
+        /**
+         * Resolves a non-conflicting unique filename using a custom existence check predicate
+         */
+        fun resolveUniqueFileName(baseName: String, fileExistsCheck: (String) -> Boolean): String {
+            val sanitized = sanitizeFileName(baseName)
+            val nameWithoutExt = sanitized.substringBeforeLast('.', sanitized)
+            val extWithDot = if (sanitized.contains('.')) ".${sanitized.substringAfterLast('.')}" else ""
+
+            var candidate = sanitized
+            var counter = 1
+
+            while (fileExistsCheck(candidate)) {
+                candidate = "$nameWithoutExt ($counter)$extWithDot"
+                counter++
+                if (counter > 1000) break
+            }
+
+            return candidate
+        }
     }
 
     private val contentResolver: ContentResolver = context.contentResolver
@@ -94,34 +146,7 @@ class StorageManager(private val context: Context) {
     /**
      * Sanitizes a filename to protect against path traversal (../), null bytes, and illegal filesystem characters
      */
-    fun sanitizeFileName(rawName: String): String {
-        var clean = rawName
-            .replace("\\", "/")
-            .substringAfterLast("/")
-            .replace("\u0000", "")
-            .trim()
-
-        // Replace illegal filesystem characters: : * ? " < > |
-        clean = clean.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-
-        // Prevent hidden files or relative path navigations
-        while (clean.startsWith(".")) {
-            clean = clean.removePrefix(".")
-        }
-
-        if (clean.isBlank()) {
-            clean = "transferred_file_${System.currentTimeMillis()}"
-        }
-
-        // Limit name length to 200 chars to avoid OS length limit issues
-        if (clean.length > 200) {
-            val ext = clean.substringAfterLast('.', "")
-            val base = clean.substringBeforeLast('.')
-            clean = if (ext.isNotEmpty()) "${base.take(190)}.$ext" else base.take(200)
-        }
-
-        return clean
-    }
+    fun sanitizeFileName(rawName: String): String = Companion.sanitizeFileName(rawName)
 
     /**
      * Checks if the device has enough free storage to receive incoming files
@@ -255,23 +280,12 @@ class StorageManager(private val context: Context) {
      * Resolves a non-conflicting unique filename: if "photo.jpg" exists, produces "photo (1).jpg", etc.
      */
     fun resolveUniqueFileName(baseName: String): String {
-        val sanitized = sanitizeFileName(baseName)
-        val nameWithoutExt = sanitized.substringBeforeLast('.', sanitized)
-        val extWithDot = if (sanitized.contains('.')) ".${sanitized.substringAfterLast('.')}" else ""
-
         val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         val dropSendDir = File(downloadsDir, DROPSEND_FOLDER_NAME)
 
-        var candidate = sanitized
-        var counter = 1
-
-        while (File(dropSendDir, candidate).exists() || isFileInMediaStore(candidate)) {
-            candidate = "$nameWithoutExt ($counter)$extWithDot"
-            counter++
-            if (counter > 1000) break
+        return Companion.resolveUniqueFileName(baseName) { candidate ->
+            File(dropSendDir, candidate).exists() || isFileInMediaStore(candidate)
         }
-
-        return candidate
     }
 
     private fun isFileInMediaStore(fileName: String): Boolean {

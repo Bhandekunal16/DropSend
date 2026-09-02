@@ -13,6 +13,7 @@ import java.util.Arrays
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
 import javax.crypto.KeyGenerator
+import javax.crypto.Mac
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -53,12 +54,47 @@ object SessionCrypto {
     }
 
     /**
-     * Derives a 256-bit symmetric session key using ECDH shared secret and SHA-256 HKDF
+     * Standard RFC 5869 HKDF-Extract using HmacSHA256
+     */
+    fun hkdfExtract(salt: ByteArray, ikm: ByteArray): ByteArray {
+        val mac = Mac.getInstance("HmacSHA256")
+        val saltKey = if (salt.isNotEmpty()) SecretKeySpec(salt, "HmacSHA256") else SecretKeySpec(ByteArray(32), "HmacSHA256")
+        mac.init(saltKey)
+        return mac.doFinal(ikm)
+    }
+
+    /**
+     * Standard RFC 5869 HKDF-Expand using HmacSHA256
+     */
+    fun hkdfExpand(prk: ByteArray, info: ByteArray, length: Int): ByteArray {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(prk, "HmacSHA256"))
+        val result = ByteArray(length)
+        var t = ByteArray(0)
+        var offset = 0
+        var i = 1
+        while (offset < length) {
+            mac.reset()
+            mac.update(t)
+            mac.update(info)
+            mac.update(i.toByte())
+            t = mac.doFinal()
+            val toCopy = minOf(t.size, length - offset)
+            System.arraycopy(t, 0, result, offset, toCopy)
+            offset += toCopy
+            i++
+        }
+        return result
+    }
+
+    /**
+     * Derives a 256-bit symmetric session key using ECDH shared secret and RFC 5869 HKDF-SHA-256
      */
     fun deriveSharedSessionKey(
         myPrivateKey: java.security.PrivateKey,
         peerPublicKeyBytes: ByteArray,
-        salt: ByteArray = byteArrayOf()
+        salt: ByteArray = byteArrayOf(),
+        info: String = "DropSend-v2-AES-GCM-Key"
     ): ByteArray {
         val keyFactory = KeyFactory.getInstance("EC")
         val x509Spec = X509EncodedKeySpec(peerPublicKeyBytes)
@@ -69,16 +105,12 @@ object SessionCrypto {
         keyAgreement.doPhase(peerPublicKey, true)
         val sharedSecret = keyAgreement.generateSecret()
 
-        // Derive 256-bit AES key via SHA-256 KDF with salt
-        val md = MessageDigest.getInstance("SHA-256")
-        if (salt.isNotEmpty()) {
-            md.update(salt)
-        }
-        md.update(sharedSecret)
-        val derivedKey = md.digest()
+        val prk = hkdfExtract(salt, sharedSecret)
+        val derivedKey = hkdfExpand(prk, info.toByteArray(Charsets.UTF_8), 32)
 
-        // Wipe intermediate secret from memory
+        // Wipe intermediate secret material from memory
         Arrays.fill(sharedSecret, 0.toByte())
+        Arrays.fill(prk, 0.toByte())
         return derivedKey
     }
 
@@ -94,19 +126,20 @@ object SessionCrypto {
     /**
      * Derives an authenticated, human-friendly 4-digit verification code (e.g., "82 41")
      * from the combination of session ID, peer endpoints, and shared secret.
+     * Provides SAS (Short Authentication String) protection against Man-in-the-Middle (MITM) attacks.
      */
     fun deriveVerificationCode(
         sessionId: String,
         sharedKeyBytes: ByteArray,
         additionalContext: String = ""
     ): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        digest.update(sessionId.toByteArray(Charsets.UTF_8))
-        digest.update(sharedKeyBytes)
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(sharedKeyBytes, "HmacSHA256"))
+        mac.update(sessionId.toByteArray(Charsets.UTF_8))
         if (additionalContext.isNotEmpty()) {
-            digest.update(additionalContext.toByteArray(Charsets.UTF_8))
+            mac.update(additionalContext.toByteArray(Charsets.UTF_8))
         }
-        val hash = digest.digest()
+        val hash = mac.doFinal()
 
         val byte1 = (hash[0].toInt() and 0xFF) % 100
         val byte2 = (hash[1].toInt() and 0xFF) % 100
