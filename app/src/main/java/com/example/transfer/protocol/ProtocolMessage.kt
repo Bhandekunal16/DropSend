@@ -13,6 +13,14 @@ sealed class ProtocolMessage {
     companion object {
         const val MAGIC_NUMBER = 0x44524F50 // "DROP"
         const val PROTOCOL_VERSION = 2
+        const val MIN_COMPATIBLE_VERSION = 1
+        const val MAX_COMPATIBLE_VERSION = 2
+        const val MAX_CHUNK_SIZE = 1024 * 1024 // 1 MB payload limit
+        const val MAX_MESSAGE_SIZE = 16 * 1024 * 1024 // 16 MB limit
+
+        fun isVersionSupported(version: Int): Boolean {
+            return version in MIN_COMPATIBLE_VERSION..MAX_COMPATIBLE_VERSION
+        }
 
         const val TYPE_HELLO: Byte = 1
         const val TYPE_SESSION_REQUEST: Byte = 2

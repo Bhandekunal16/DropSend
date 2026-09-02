@@ -127,6 +127,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
     // Speed tracking
     private var lastMeasuredBytes = 0L
     private var lastMeasuredTime = System.currentTimeMillis()
+    private var smoothedSpeedBps: Double = 0.0
 
     // Resume tracking
     private var currentTransferFileId: String = ""
@@ -144,6 +145,13 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 }
                 previousDeviceIds = currentIds
                 _uiState.update { it.copy(nearbyDevices = devices) }
+            }
+        }
+
+        // Listen for foreground service notification cancel actions
+        viewModelScope.launch {
+            DropSendTransferService.cancelEvents.collect {
+                cancelTransfer()
             }
         }
     }
@@ -813,27 +821,61 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
 
     private suspend fun handleReceiverChunk(chunk: ProtocolMessage.Chunk, transport: TransferTransport) {
         val temp = currentTempFile ?: return
+        val receiving = currentReceivingFile ?: return
+
+        // Validate chunk belongs to current active file
+        if (chunk.fileId != receiving.fileId) {
+            Log.w(TAG, "Rejected chunk for mismatching fileId: ${chunk.fileId} vs ${receiving.fileId}")
+            return
+        }
+
+        // Validate chunk payload size against wire safety bounds
+        if (chunk.payload.size > ProtocolMessage.MAX_CHUNK_SIZE) {
+            Log.e(TAG, "Chunk payload ${chunk.payload.size} exceeds maximum allowable chunk size")
+            return
+        }
+
+        // Validate offset range
+        if (chunk.offset < 0 || chunk.offset > receiving.size + 1024) {
+            Log.e(TAG, "Chunk offset out of range: offset=${chunk.offset}, fileSize=${receiving.size}")
+            return
+        }
+
         val decrypted = try {
             SessionCrypto.decryptChunk(chunk.payload, sessionKey)
         } catch (_: Exception) {
             chunk.payload
         }
 
-        storageManager.writeChunkToTempFile(temp, chunk.offset, decrypted)
-        currentFileBytesReceived = chunk.offset + decrypted.size
+        try {
+            storageManager.writeChunkToTempFile(temp, chunk.offset, decrypted)
+        } catch (e: Exception) {
+            Log.e(TAG, "Disk write failure for chunk at offset ${chunk.offset}", e)
+            withContext(Dispatchers.Main) {
+                _uiState.update {
+                    it.copy(
+                        sessionState = SessionState.FAILED,
+                        errorMessage = DropSendError.StorageWriteFailed(receiving.name, e).userMessage
+                    )
+                }
+            }
+            return
+        }
+
+        currentFileBytesReceived = maxOf(currentFileBytesReceived, chunk.offset + decrypted.size)
 
         withContext(Dispatchers.Main) {
             _uiState.update { state ->
                 val prevTotal = state.transferProgress.totalBytesTransferred
                 val newProgress = state.transferProgress.copy(
                     currentFileBytes = currentFileBytesReceived,
-                    totalBytesTransferred = prevTotal + decrypted.size
+                    totalBytesTransferred = maxOf(prevTotal, prevTotal + decrypted.size)
                 )
                 state.copy(transferProgress = newProgress)
             }
         }
 
-        // Send ACK
+        // Send ACK with confirmed monotonic offset
         transport.send(
             ProtocolMessage.ChunkAck(
                 fileId = chunk.fileId,
@@ -1156,6 +1198,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
     private fun startSpeedTracker() {
         lastMeasuredBytes = 0L
         lastMeasuredTime = System.currentTimeMillis()
+        smoothedSpeedBps = 0.0
 
         speedCalcJob?.cancel()
         speedCalcJob = viewModelScope.launch {
@@ -1166,7 +1209,10 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 val elapsedSec = ((currentTime - lastMeasuredTime) / 1000.0).coerceAtLeast(0.1)
                 val bytesDiff = (currentBytes - lastMeasuredBytes).coerceAtLeast(0)
 
-                val speedBps = (bytesDiff / elapsedSec).toLong()
+                val instantSpeed = bytesDiff / elapsedSec
+                smoothedSpeedBps = if (smoothedSpeedBps == 0.0) instantSpeed else (0.35 * instantSpeed + 0.65 * smoothedSpeedBps)
+                val speedBps = smoothedSpeedBps.toLong().coerceAtLeast(0L)
+
                 val totalBytes = _uiState.value.transferProgress.totalSizeBytes
                 val remainingBytes = (totalBytes - currentBytes).coerceAtLeast(0)
                 val eta = if (speedBps > 0) remainingBytes / speedBps else 0L

@@ -243,6 +243,139 @@ class ExampleUnitTest {
         assertEquals(81920L, parsed.confirmedOffset)
     }
 
+    // ==========================================
+    // P1: State Machine, Protocol, Chunk Validation & Error Taxonomy
+    // ==========================================
+
+    @Test
+    fun testTransferStateMachineLegalTransitions() {
+        // IDLE -> DISCOVERING
+        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
+            com.example.domain.model.SessionState.IDLE,
+            com.example.domain.model.SessionState.DISCOVERING
+        ))
+
+        // CONNECTING -> AUTHENTICATING -> WAITING_FOR_ACCEPT -> TRANSFERRING -> VERIFYING -> COMPLETED
+        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
+            com.example.domain.model.SessionState.CONNECTING,
+            com.example.domain.model.SessionState.AUTHENTICATING
+        ))
+        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
+            com.example.domain.model.SessionState.AUTHENTICATING,
+            com.example.domain.model.SessionState.WAITING_FOR_ACCEPT
+        ))
+        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
+            com.example.domain.model.SessionState.WAITING_FOR_ACCEPT,
+            com.example.domain.model.SessionState.TRANSFERRING
+        ))
+        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
+            com.example.domain.model.SessionState.TRANSFERRING,
+            com.example.domain.model.SessionState.VERIFYING
+        ))
+        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
+            com.example.domain.model.SessionState.VERIFYING,
+            com.example.domain.model.SessionState.COMPLETED
+        ))
+
+        // Cancellation and Disconnection
+        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
+            com.example.domain.model.SessionState.TRANSFERRING,
+            com.example.domain.model.SessionState.CANCELLED
+        ))
+        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
+            com.example.domain.model.SessionState.TRANSFERRING,
+            com.example.domain.model.SessionState.DISCONNECTED
+        ))
+    }
+
+    @Test
+    fun testTransferStateMachineIllegalTransitions() {
+        // Cannot jump directly from COMPLETED to TRANSFERRING
+        assertFalse(com.example.domain.model.TransferStateMachine.isLegalTransition(
+            com.example.domain.model.SessionState.COMPLETED,
+            com.example.domain.model.SessionState.TRANSFERRING
+        ))
+
+        // Cannot jump directly from IDLE to VERIFYING
+        assertFalse(com.example.domain.model.TransferStateMachine.isLegalTransition(
+            com.example.domain.model.SessionState.IDLE,
+            com.example.domain.model.SessionState.VERIFYING
+        ))
+
+        // Cannot jump directly from CANCELLED to TRANSFERRING
+        assertFalse(com.example.domain.model.TransferStateMachine.isLegalTransition(
+            com.example.domain.model.SessionState.CANCELLED,
+            com.example.domain.model.SessionState.TRANSFERRING
+        ))
+    }
+
+    @Test
+    fun testTransferStateMachineTerminalStates() {
+        assertTrue(com.example.domain.model.TransferStateMachine.isTerminal(com.example.domain.model.SessionState.COMPLETED))
+        assertTrue(com.example.domain.model.TransferStateMachine.isTerminal(com.example.domain.model.SessionState.CANCELLED))
+        assertTrue(com.example.domain.model.TransferStateMachine.isTerminal(com.example.domain.model.SessionState.FAILED))
+        assertFalse(com.example.domain.model.TransferStateMachine.isTerminal(com.example.domain.model.SessionState.TRANSFERRING))
+        assertFalse(com.example.domain.model.TransferStateMachine.isTerminal(com.example.domain.model.SessionState.IDLE))
+    }
+
+    @Test
+    fun testProtocolVersionSupport() {
+        assertTrue(ProtocolMessage.isVersionSupported(1))
+        assertTrue(ProtocolMessage.isVersionSupported(2))
+        assertFalse(ProtocolMessage.isVersionSupported(0))
+        assertFalse(ProtocolMessage.isVersionSupported(99))
+    }
+
+    @Test
+    fun testMalformedStreamHandling() {
+        // Stream with invalid magic number
+        val invalidMagicStream = ByteArrayInputStream(byteArrayOf(0x00, 0x00, 0x00, 0x00, 0x01, 0x00))
+        assertNull(ProtocolMessage.readFromStream(invalidMagicStream))
+
+        // Empty stream
+        val emptyStream = ByteArrayInputStream(ByteArray(0))
+        assertNull(ProtocolMessage.readFromStream(emptyStream))
+    }
+
+    @Test
+    fun testErrorTaxonomy() {
+        val storageErr = com.example.domain.model.DropSendError.StorageFull(5000L, 1000L)
+        assertEquals("ERR_STORAGE_FULL", storageErr.code)
+        assertTrue(storageErr.userMessage.contains("Not enough free storage"))
+
+        val checksumErr = com.example.domain.model.DropSendError.ChecksumMismatch("test.pdf")
+        assertEquals("ERR_CHECKSUM_MISMATCH", checksumErr.code)
+        assertTrue(checksumErr.userMessage.contains("test.pdf"))
+
+        val permErr = com.example.domain.model.DropSendError.PermissionDenied("NEARBY_WIFI_DEVICES")
+        assertEquals("ERR_PERMISSION_DENIED", permErr.code)
+
+        val timeoutErr = com.example.domain.model.DropSendError.Timeout("Transfer session")
+        assertEquals("ERR_TIMEOUT", timeoutErr.code)
+    }
+
+    @Test
+    fun testLargeFileLongOffsets() {
+        val largeSize = 4L * 1024 * 1024 * 1024 // 4 GB file (> 32-bit int)
+        val chunkOffset = 3L * 1024 * 1024 * 1024 // 3 GB offset
+        val chunk = ProtocolMessage.Chunk(
+            fileId = "large-4gb-file",
+            sequence = 24576L,
+            offset = chunkOffset,
+            payload = byteArrayOf(1, 2, 3, 4)
+        )
+
+        val bos = ByteArrayOutputStream()
+        chunk.writeToStream(bos)
+        bos.flush()
+
+        val parsed = ProtocolMessage.readFromStream(ByteArrayInputStream(bos.toByteArray())) as ProtocolMessage.Chunk
+        assertEquals("large-4gb-file", parsed.fileId)
+        assertEquals(chunkOffset, parsed.offset)
+        assertEquals(24576L, parsed.sequence)
+        assertEquals("4.00 GB", formatFileSize(largeSize))
+    }
+
     @Test
     fun testFormatFileSize() {
         assertEquals("0 B", formatFileSize(0))
