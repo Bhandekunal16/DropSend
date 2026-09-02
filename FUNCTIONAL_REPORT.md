@@ -141,8 +141,74 @@ DropSend is an offline, peer-to-peer (P2P), direct device-to-device file transfe
 
 ---
 
-## 7. Quality Assurance & Verification
+## 7. Android Compatibility Matrix
 
-- **Robolectric & Unit Tests:** Unit test suites for cryptography (`SessionCrypto`), protocol serialization (`TransferProtocolMessage`), and state management.
-- **Emulator Simulation Suite:** Built-in simulation tool capable of injecting simulated sender/receiver transfer sessions at custom throttle rates (e.g. 5 MB/s, 25 MB/s, 100 MB/s).
-- **Compilation Status:** Verified with `compile_applet` — Build clean.
+| Android Version | API Level | Discovery Mechanisms | Transfer Transport | Background Execution | Storage Mechanism | Runtime Permissions | Validation Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Android 7.0–10** | API 24–29 | UDP Multicast, Legacy BLE | TCP Sockets, Bluetooth SPP | Standard Foreground Service | Direct File System (`Downloads/DropSend`) | `ACCESS_FINE_LOCATION`, `BLUETOOTH`, `BLUETOOTH_ADMIN` | `IMPLEMENTED — NOT YET VERIFIED ON PHYSICAL HARDWARE` |
+| **Android 11–12** | API 30–31 | UDP Multicast, BLE Scan/Adv | TCP Sockets, Bluetooth SPP | Foreground Service (`connectedDevice`) | Scoped Storage / `MediaStore.Downloads` | `BLUETOOTH_SCAN`, `BLUETOOTH_ADVERTISE`, `BLUETOOTH_CONNECT` | `IMPLEMENTED — NOT YET VERIFIED ON PHYSICAL HARDWARE` |
+| **Android 13** | API 33 | UDP, BLE, Wi-Fi Direct | TCP Sockets, Bluetooth SPP | Foreground Service | `MediaStore.Downloads` (`DropSend` dir) | `NEARBY_WIFI_DEVICES`, `POST_NOTIFICATIONS` | `IMPLEMENTED — NOT YET VERIFIED ON PHYSICAL HARDWARE` |
+| **Android 14** | API 34 | UDP, BLE, Wi-Fi Direct | TCP Sockets, Bluetooth SPP | FGS (`connectedDevice\|dataSync`) | `MediaStore.Downloads` | `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `FOREGROUND_SERVICE_DATA_SYNC` | `IMPLEMENTED — NOT YET VERIFIED ON PHYSICAL HARDWARE` |
+| **Android 15 / 16** | API 35–36 | UDP, BLE, Wi-Fi Direct | TCP Sockets, Bluetooth SPP | FGS 6-hour DataSync limits handled | `MediaStore.Downloads` | Strict 16KB page alignment compatible | `VERIFIED (JVM / Robolectric API 36)` |
+
+---
+
+## 8. Failure & Recovery Matrix
+
+| Failure Scenario | Trigger Condition | System Action | Final Transfer State | User Recovery Guidance |
+| :--- | :--- | :--- | :--- | :--- |
+| **Network Disconnect** | Wi-Fi dropped / Socket closed | Preserves `.part` file, pauses transfer | `DISCONNECTED` / `FAILED` | Reconnect to same Wi-Fi network and tap Resume. |
+| **Sender Cancellation** | Sender presses Cancel | Sends `CANCEL` frame, tears down session, clears temp buffers | `CANCELLED` | Start a new transfer when ready. |
+| **Receiver Cancellation** | Receiver presses Cancel | Sends `CANCEL` frame, deletes unverified `.part` file | `CANCELLED` | File was discarded; no partial files remain on disk. |
+| **Checksum Mismatch** | SHA-256 hash doesn't match manifest | Quarantines & immediately deletes `.part` file | `FAILED` | Checksum verification failed; transfer aborted for data integrity. |
+| **Storage Full** | Free disk space < file size + 50MB | Pre-flight check halts transfer prior to receiving chunks | `FAILED` | Free up device storage and retry transfer. |
+| **Storage Write Failure** | I/O error writing to disk | Halts stream, reports error to UI, deletes partial buffer | `FAILED` | Check device storage permissions and retry. |
+| **Peer Rejection** | Receiver declines incoming prompt | Sends `SESSION_REJECT` frame, disconnects socket | `REJECTED` | Transfer was declined by the receiver. |
+| **Handshake Timeout** | Peer does not respond within 15s | Socket closes, resources wiped | `FAILED` | Check if peer is still awake and within range. |
+
+---
+
+## 9. Performance & Telemetry Model
+
+### 9.1 Benchmark Methodology
+- **Simulated Testbench (In-App Simulator):** Provides synthetic network throttling (5 MB/s, 25 MB/s, 100 MB/s) to validate UI smoothness, progress interpolation, and state transitions without physical hardware.
+- **Physical Device Benchmark Suite (Procedure Defined):**
+  - **Metrics Measured:** Peer discovery latency (ms), connection setup time (ms), cryptographic handshake duration (ms), effective transfer throughput (MB/s), memory allocation (MB), and resume overhead (ms).
+  - **Physical Device Benchmark Status:** `NOT TESTED ON PHYSICAL HARDWARE` (Hardware lab validation pending).
+
+### 9.2 Real-Time Telemetry Pipeline
+- **Throughput Calculation:** Computed via Exponential Moving Average (EMA) with smoothing factor $\alpha = 0.35$:
+  $$\text{Speed}_{\text{smoothed}} = \alpha \cdot \text{Speed}_{\text{instant}} + (1 - \alpha) \cdot \text{Speed}_{\text{prev}}$$
+- **ETA Estimation:** Calculated as $\frac{\text{Remaining Bytes}}{\text{Speed}_{\text{smoothed}}}$, gracefully clamped to avoid divide-by-zero or negative values.
+
+---
+
+## 10. Storage & File Management Policy
+
+1. **Filename Collision Resolution:** If `Downloads/DropSend/photo.jpg` exists, the system automatically resolves to `photo (1).jpg`, `photo (2).jpg`, etc., preventing data overwrite.
+2. **Path Traversal & Unicode Sanitization:** Strips directory traversal sequences (`../`), null bytes (`\0`), and reserved filesystem characters while preserving valid Unicode filenames across languages.
+3. **Large File Support:** Employs 64-bit `Long` variables for all file sizes, byte offsets, transfer progress, and checksum streams, supporting transfers exceeding 4 GB+.
+4. **Atomic Commit:** Received chunks are written to temporary sandbox cache files (`fileId_name.part`) and only promoted to public `Downloads/DropSend` upon passing end-to-end SHA-256 integrity checks.
+
+---
+
+## 11. Concurrency & Queueing Policy
+
+- **Single Active Transfer Policy:** To ensure strict cryptographic isolation, zero session key cross-talk, and predictable foreground service lifecycle, DropSend enforces **one active transfer session at a time**.
+- **Multi-File Batching:** Multiple files selected by the user are bundled into a single atomic transfer session with individual file progress and overall batch progress tracking.
+
+---
+
+## 12. Quality Assurance & Test Verification
+
+- **Automated Unit & Robolectric Tests:** Comprehensive test suite covering:
+  - Ephemeral ECDH key exchange & RFC 5869 HKDF derivation
+  - AES-256-GCM authenticated encryption and tamper detection
+  - Short Authentication String (SAS) 4-digit code matching
+  - Protocol message serialization & version negotiation (v1–v2)
+  - `TransferStateMachine` legal vs. illegal state transitions
+  - Filename collision resolution & Unicode path sanitization
+  - Large file offset and size formatting (> 4 GB)
+  - `StorageManager` temp file caching and storage space pre-validation
+- **Compilation Status:** Clean build with Android SDK 36.
+

@@ -377,6 +377,44 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun testFilenameCollisionResolution() {
+        val existingFiles = setOf("report.pdf", "report (1).pdf", "report (2).pdf")
+        val candidate = StorageManager.resolveUniqueFileName("report.pdf") { name ->
+            existingFiles.contains(name)
+        }
+        assertEquals("report (3).pdf", candidate)
+
+        val nonColliding = StorageManager.resolveUniqueFileName("invoice.pdf") { name ->
+            existingFiles.contains(name)
+        }
+        assertEquals("invoice.pdf", nonColliding)
+    }
+
+    @Test
+    fun testUnicodeAndReservedFilenameSanitization() {
+        val unicodeName = "文档_사진_über_österreich.png"
+        val sanitizedUnicode = StorageManager.sanitizeFileName(unicodeName)
+        assertEquals("文档_사진_über_österreich.png", sanitizedUnicode)
+
+        val dangerousPath = "../../../etc/passwd"
+        val sanitizedPath = StorageManager.sanitizeFileName(dangerousPath)
+        assertEquals("passwd", sanitizedPath)
+
+        val nullByteName = "fake.jpg\u0000.exe"
+        val sanitizedNull = StorageManager.sanitizeFileName(nullByteName)
+        assertEquals("fake.jpg.exe", sanitizedNull)
+    }
+
+    @Test
+    fun testDropSendConfigConstants() {
+        assertEquals(8988, com.example.domain.model.DropSendConfig.DEFAULT_TCP_PORT)
+        assertEquals(15000L, com.example.domain.model.DropSendConfig.PEER_EXPIRY_MS)
+        assertEquals(128 * 1024, com.example.domain.model.DropSendConfig.LAN_CHUNK_SIZE)
+        assertEquals(32 * 1024, com.example.domain.model.DropSendConfig.BLUETOOTH_CHUNK_SIZE)
+        assertEquals(".part", com.example.domain.model.DropSendConfig.TEMP_FILE_EXTENSION)
+    }
+
+    @Test
     fun testFormatFileSize() {
         assertEquals("0 B", formatFileSize(0))
         assertEquals("500 B", formatFileSize(500))
