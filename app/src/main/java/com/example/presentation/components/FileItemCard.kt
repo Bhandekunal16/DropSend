@@ -102,13 +102,13 @@ fun FileItemCard(
                     if (onOpenFile != null) {
                         IconButton(
                             onClick = { onOpenFile(file) },
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.OpenInNew,
                                 contentDescription = "Open file",
                                 tint = SleekGreen,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     } else {
@@ -116,7 +116,7 @@ fun FileItemCard(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = "Completed",
                             tint = SleekGreen,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
@@ -125,7 +125,7 @@ fun FileItemCard(
                         imageVector = Icons.Default.Sync,
                         contentDescription = "Transferring",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 FileTransferStatus.FAILED -> {
@@ -133,7 +133,7 @@ fun FileItemCard(
                         imageVector = Icons.Default.Error,
                         contentDescription = "Failed",
                         tint = SleekRed,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 FileTransferStatus.PENDING -> {
@@ -147,13 +147,13 @@ fun FileItemCard(
         } else if (onRemove != null) {
             IconButton(
                 onClick = onRemove,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Remove file",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }

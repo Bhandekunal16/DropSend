@@ -2,4 +2,43 @@
     <string name="app_name">DropSend</string>
     <string name="app_tagline">Fast offline file sharing</string>
     <string name="app_subtext">No account. No cloud. Just nearby sharing.</string>
+    
+    <!-- Navigation & Flow -->
+    <string name="action_send">Send Files</string>
+    <string name="action_receive">Receive Files</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_resume">Resume</string>
+    <string name="action_accept">Accept</string>
+    <string name="action_decline">Decline</string>
+    <string name="action_clear_all">Clear All</string>
+    <string name="action_done">Done</string>
+    <string name="action_open_file">Open File</string>
+    <string name="action_open_downloads">Open Downloads</string>
+    
+    <!-- State Titles & Headers -->
+    <string name="title_transfer_history">Transfer History</string>
+    <string name="title_verifying_security">Verifying Security</string>
+    <string name="title_transferring">Transferring</string>
+    <string name="title_transfer_complete">Transfer Complete</string>
+    <string name="title_transfer_interrupted">Transfer Interrupted</string>
+    <string name="title_connection_alert">Connection Alert</string>
+    <string name="title_direct_network">Direct Network Connection</string>
+    <string name="title_pairing_qr">Scan QR Code to Pair</string>
+    
+    <!-- Status & Guidance -->
+    <string name="status_searching_peers">Searching for nearby devices…</string>
+    <string name="status_ready_to_receive">Ready to receive files</string>
+    <string name="status_connecting">Connecting securely…</string>
+    <string name="status_verifying_sha256">Verifying SHA-256 integrity…</string>
+    <string name="status_transfer_paused">Transfer paused</string>
+    <string name="status_transfer_failed">Transfer failed</string>
+    
+    <!-- Accessibility & Labels -->
+    <string name="cd_qr_code">Pairing QR Code</string>
+    <string name="cd_delete_item">Delete entry</string>
+    <string name="cd_close">Close</string>
+    <string name="cd_wifi_status">Wi-Fi Status</string>
+    <string name="cd_bluetooth_status">Bluetooth Status</string>
 </resources>
