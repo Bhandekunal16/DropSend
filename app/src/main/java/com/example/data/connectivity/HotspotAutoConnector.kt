@@ -26,20 +26,20 @@ data class QrConnectionParams(
     val deviceId: String = ""
 )
 
-/**
- * Manages high-speed, low-latency automatic Wi-Fi hotspot connection and process network binding.
- *
- * Employs structured concurrency with callback-driven suspension (no polling loops),
- * deterministic callback lifecycle management, and generation-based stale attempt rejection.
- */
-class HotspotAutoConnector(private val context: Context) {
+class HotspotAutoConnector(
+    context: Context
+) {
 
     companion object {
         private const val TAG = "HotspotAutoConnector"
-        private const val CONNECTION_TIMEOUT_MS = 15000L
+        private const val CONNECTION_TIMEOUT_MS = 15_000L
+        private const val DEFAULT_PORT = 8888
+        private const val DEFAULT_IP = "192.168.43.1"
 
-        // Precompiled regex for IP:Port parsing across QR scan frames
-        private val IP_PORT_REGEX = Regex("""^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(?::([0-9]{1,5}))?$""")
+        private val IP_PORT_REGEX =
+            Regex(
+                """^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(?::([0-9]{1,5}))?$"""
+            )
     }
 
     private val connectivityManager =
@@ -73,390 +73,703 @@ class HotspotAutoConnector(private val context: Context) {
         get() = currentAttemptId
 
     /**
-     * Parses connection parameters from QR code strings with zero unnecessary allocations.
+     * Parses:
      *
-     * Supports:
-     * 1. dropsend://connect?ssid=...&pass=...&ip=...&port=...&dev=...&id=...
-     * 2. WIFI:S:...;T:WPA;P:...;; (standard Wi-Fi QR with escape support)
-     * 3. Plain IP:Port (e.g. 192.168.43.1:8888 or 192.168.43.1)
+     * dropsend://connect?ssid=...&pass=...&ip=...&port=...&dev=...&id=...
+     * WIFI:S:...;T:WPA;P:...;;
+     * 192.168.43.1:8888
      */
     fun parseQrCode(content: String): QrConnectionParams? {
         val trimmed = content.trim()
-        if (trimmed.isEmpty()) return null
+
+        if (trimmed.isEmpty()) {
+            return null
+        }
 
         if (trimmed.startsWith("dropsend://", ignoreCase = true)) {
-            try {
-                val uri = Uri.parse(trimmed)
-                val ssid = uri.getQueryParameter("ssid").orEmpty()
-                val pass = uri.getQueryParameter("pass").orEmpty()
-                val rawIp = uri.getQueryParameter("ip")
-                val ip = if (!rawIp.isNullOrBlank() && isValidIpv4(rawIp)) rawIp else "192.168.43.1"
-                val rawPort = uri.getQueryParameter("port")
-                val port = if (!rawPort.isNullOrBlank()) {
-                    rawPort.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
-                } else {
-                    8888
-                }
-                val dev = uri.getQueryParameter("dev") ?: "Nearby Receiver"
-                val id = uri.getQueryParameter("id") ?: "REV-${ip.takeLast(4)}"
-
-                return QrConnectionParams(
-                    ssid = ssid,
-                    passphrase = pass,
-                    ipAddress = ip,
-                    port = port,
-                    deviceName = dev,
-                    deviceId = id
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to parse dropsend URI: ${e.message}")
-            }
+            return parseDropSendUri(trimmed)
         }
 
         if (trimmed.startsWith("WIFI:", ignoreCase = true)) {
-            try {
-                return parseWifiQr(trimmed)
+            return try {
+                parseWifiQr(trimmed)
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to parse standard WIFI QR: ${e.message}")
+                Log.w(TAG, "Failed to parse WIFI QR: ${e.message}")
+                null
             }
         }
 
-        // Direct IP:Port format
-        val match = IP_PORT_REGEX.matchEntire(trimmed)
-        if (match != null) {
-            val ip = match.groupValues[1]
-            if (isValidIpv4(ip)) {
-                val rawPort = match.groupValues[2]
-                val port = if (rawPort.isNotEmpty()) {
-                    rawPort.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
-                } else {
-                    8888
+        return parseDirectIp(trimmed)
+    }
+
+    private fun parseDropSendUri(content: String): QrConnectionParams? {
+        return try {
+            val uri = Uri.parse(content)
+
+            val ssid = uri.getQueryParameter("ssid").orEmpty()
+            val passphrase = uri.getQueryParameter("pass").orEmpty()
+
+            val ip = uri.getQueryParameter("ip")
+                ?.takeIf(::isValidIpv4)
+                ?: DEFAULT_IP
+
+            val port = uri.getQueryParameter("port")
+                ?.let { value ->
+                    value.toIntOrNull()?.takeIf { it in 1..65_535 }
                 }
-                return QrConnectionParams(
-                    ssid = "",
-                    passphrase = "",
-                    ipAddress = ip,
-                    port = port,
-                    deviceName = "Direct IP $ip",
-                    deviceId = ip.takeLast(4)
-                )
-            }
+                ?: DEFAULT_PORT
+
+            val deviceName =
+                uri.getQueryParameter("dev") ?: "Nearby Receiver"
+
+            val deviceId =
+                uri.getQueryParameter("id")
+                    ?: "REV-${ip.takeLast(4)}"
+
+            QrConnectionParams(
+                ssid = ssid,
+                passphrase = passphrase,
+                ipAddress = ip,
+                port = port,
+                deviceName = deviceName,
+                deviceId = deviceId
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse dropsend URI: ${e.message}")
+            null
+        }
+    }
+
+    private fun parseDirectIp(content: String): QrConnectionParams? {
+        val match = IP_PORT_REGEX.matchEntire(content) ?: return null
+
+        val ip = match.groupValues[1]
+
+        if (!isValidIpv4(ip)) {
+            return null
         }
 
-        return null
+        val rawPort = match.groupValues[2]
+
+        val port = if (rawPort.isEmpty()) {
+            DEFAULT_PORT
+        } else {
+            rawPort.toIntOrNull()?.takeIf { it in 1..65_535 }
+                ?: return null
+        }
+
+        return QrConnectionParams(
+            ssid = "",
+            passphrase = "",
+            ipAddress = ip,
+            port = port,
+            deviceName = "Direct IP $ip",
+            deviceId = ip.takeLast(4)
+        )
     }
 
     private fun isValidIpv4(ip: String): Boolean {
-        val parts = ip.split('.')
-        if (parts.size != 4) return false
-        for (part in parts) {
-            val num = part.toIntOrNull() ?: return false
-            if (num !in 0..255) return false
+        var start = 0
+        var segments = 0
+
+        for (i in 0..ip.length) {
+            if (i == ip.length || ip[i] == '.') {
+                if (i == start) {
+                    return false
+                }
+
+                val value = ip.substring(start, i).toIntOrNull()
+                    ?: return false
+
+                if (value !in 0..255) {
+                    return false
+                }
+
+                segments++
+                start = i + 1
+            }
         }
-        return true
+
+        return segments == 4
     }
 
     private fun parseWifiQr(content: String): QrConnectionParams? {
         var ssid = ""
-        var pass = ""
-        var i = 5 // Skip "WIFI:" prefix
-        val len = content.length
+        var passphrase = ""
 
-        while (i < len) {
-            val colon = content.indexOf(':', i)
-            if (colon == -1 || colon == i) break
-            val key = content.substring(i, colon).uppercase()
-            var end = colon + 1
-            val sb = StringBuilder()
-            while (end < len) {
-                val c = content[end]
-                if (c == '\\' && end + 1 < len) {
-                    sb.append(content[end + 1])
-                    end += 2
-                } else if (c == ';') {
-                    break
-                } else {
-                    sb.append(c)
-                    end++
+        var index = 5
+        val length = content.length
+
+        while (index < length) {
+            val colonIndex = content.indexOf(':', index)
+
+            if (colonIndex <= index) {
+                break
+            }
+
+            val key = content.substring(index, colonIndex)
+
+            var valueEnd = colonIndex + 1
+            var escaped = false
+
+            while (valueEnd < length) {
+                val char = content[valueEnd]
+
+                if (escaped) {
+                    escaped = false
+                    valueEnd++
+                    continue
                 }
+
+                if (char == '\\') {
+                    escaped = true
+                    valueEnd++
+                    continue
+                }
+
+                if (char == ';') {
+                    break
+                }
+
+                valueEnd++
             }
-            val value = sb.toString()
-            when (key) {
+
+            val value = unescapeWifiValue(
+                content,
+                colonIndex + 1,
+                valueEnd
+            )
+
+            when (key.uppercase()) {
                 "S" -> ssid = value
-                "P" -> pass = value
+                "P" -> passphrase = value
             }
-            i = end + 1
-            while (i < len && content[i] == ';') {
-                i++
+
+            index = valueEnd + 1
+
+            while (index < length && content[index] == ';') {
+                index++
             }
         }
 
-        if (ssid.isEmpty() && pass.isEmpty()) return null
+        if (ssid.isEmpty() && passphrase.isEmpty()) {
+            return null
+        }
 
         return QrConnectionParams(
             ssid = ssid,
-            passphrase = pass,
-            ipAddress = "192.168.43.1",
-            port = 8888,
+            passphrase = passphrase,
+            ipAddress = DEFAULT_IP,
+            port = DEFAULT_PORT,
             deviceName = ssid.ifBlank { "Nearby Hotspot" },
             deviceId = ssid.takeLast(4)
         )
     }
 
+    private fun unescapeWifiValue(
+        content: String,
+        start: Int,
+        end: Int
+    ): String {
+        var requiresUnescape = false
+
+        for (i in start until end) {
+            if (content[i] == '\\') {
+                requiresUnescape = true
+                break
+            }
+        }
+
+        if (!requiresUnescape) {
+            return content.substring(start, end)
+        }
+
+        val result = StringBuilder(end - start)
+
+        var i = start
+
+        while (i < end) {
+            val char = content[i]
+
+            if (char == '\\' && i + 1 < end) {
+                result.append(content[i + 1])
+                i += 2
+            } else {
+                result.append(char)
+                i++
+            }
+        }
+
+        return result.toString()
+    }
+
     /**
-     * Connects to receiver's Wi-Fi hotspot network specifier on Android 10+ (API 29+),
-     * binds the process network, and reports readiness immediately upon callback arrival.
+     * Connects to the receiver hotspot on Android 10+.
      *
-     * Uses coroutine suspension driven directly by [ConnectivityManager.NetworkCallback.onAvailable]
-     * without polling or delays.
+     * The coroutine is suspended until:
+     * - the network becomes available,
+     * - Android reports the request unavailable,
+     * - the request times out,
+     * - the coroutine is cancelled,
+     * - another connection attempt supersedes this one.
      */
     suspend fun connectToHotspotNetwork(
         params: QrConnectionParams,
         onStatusUpdate: (String) -> Unit = {}
     ): Boolean {
-        // Direct IP mode or legacy Android: no Wi-Fi association via specifier needed
-        if (params.ssid.isBlank() || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            onStatusUpdate("Connecting directly to ${params.ipAddress}:${params.port}...")
+
+        /*
+         * Direct IP mode does not require a WifiNetworkSpecifier.
+         */
+        if (
+            params.ssid.isBlank() ||
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+        ) {
+            onStatusUpdate(
+                "Connecting directly to ${params.ipAddress}:${params.port}..."
+            )
             return true
         }
 
         val cm = connectivityManager
+
         if (cm == null) {
             Log.e(TAG, "ConnectivityManager unavailable")
             return false
         }
 
-        val attemptId: Long
-        var registration: NetworkCallbackRegistration? = null
-        var oldCont: CancellableContinuation<Boolean>? = null
-        var oldReg: NetworkCallbackRegistration? = null
+        val attemptId = nextAttemptId.incrementAndGet()
+
+        /*
+         * Supersede the previous connection attempt before creating
+         * the new network request.
+         */
+        val previousContinuation: CancellableContinuation<Boolean>?
+        val previousRegistration: NetworkCallbackRegistration?
 
         synchronized(stateLock) {
-            attemptId = nextAttemptId.incrementAndGet()
             currentAttemptId = attemptId
 
-            // Safely supersede any previous attempt
-            oldCont = activeContinuation?.takeIf { it.isActive }
-            activeContinuation = null
+            previousContinuation =
+                activeContinuation?.takeIf { it.isActive }
 
-            oldReg = activeRegistration
+            previousRegistration = activeRegistration
+
+            activeContinuation = null
             activeRegistration = null
         }
 
-        oldCont?.resume(false)
-        oldReg?.cleanup()
+        /*
+         * Perform potentially blocking cleanup outside the lock.
+         */
+        previousContinuation?.resume(false)
+        previousRegistration?.cleanup()
+
         unbindProcessNetwork()
 
         var lastStatus: String? = null
+
         fun emitStatus(status: String) {
-            if (currentAttemptId != attemptId) return
-            if (lastStatus == status) return
+            if (currentAttemptId != attemptId) {
+                return
+            }
+
+            if (lastStatus == status) {
+                return
+            }
+
             lastStatus = status
+
             try {
                 onStatusUpdate(status)
             } catch (e: Exception) {
-                Log.w(TAG, "Status update callback error: ${e.message}")
+                Log.w(
+                    TAG,
+                    "Status callback failed: ${e.message}"
+                )
             }
         }
 
-        emitStatus("Connecting to Receiver's Hotspot: ${params.ssid}...")
+        emitStatus(
+            "Connecting to Receiver's Hotspot: ${params.ssid}..."
+        )
 
-        // Build WifiNetworkSpecifier
-        val specifierBuilder = WifiNetworkSpecifier.Builder()
-            .setSsid(params.ssid)
+        val specifierBuilder =
+            WifiNetworkSpecifier.Builder()
+                .setSsid(params.ssid)
 
         if (params.passphrase.isNotBlank()) {
             try {
-                specifierBuilder.setWpa2Passphrase(params.passphrase)
+                specifierBuilder.setWpa2Passphrase(
+                    params.passphrase
+                )
             } catch (e: IllegalArgumentException) {
-                Log.e(TAG, "Invalid WPA2 passphrase provided: ${e.message}")
+                Log.e(
+                    TAG,
+                    "Invalid WPA2 passphrase: ${e.message}"
+                )
                 return false
             }
         }
 
-        val specifier = specifierBuilder.build()
+        val request =
+            NetworkRequest.Builder()
+                .addTransportType(
+                    NetworkCapabilities.TRANSPORT_WIFI
+                )
+                /*
+                 * Receiver hotspots frequently have no Internet.
+                 */
+                .removeCapability(
+                    NetworkCapabilities.NET_CAPABILITY_INTERNET
+                )
+                .setNetworkSpecifier(
+                    specifierBuilder.build()
+                )
+                .build()
 
-        val request = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .setNetworkSpecifier(specifier)
-            .build()
+        val success = withTimeoutOrNull(
+            CONNECTION_TIMEOUT_MS
+        ) {
+            suspendCancellableCoroutine { continuation ->
 
-        val isConnected = try {
-            withTimeoutOrNull(CONNECTION_TIMEOUT_MS) {
-                suspendCancellableCoroutine<Boolean> { continuation ->
-                    val callback = object : ConnectivityManager.NetworkCallback() {
-                        override fun onAvailable(network: Network) {
-                            super.onAvailable(network)
-                            if (currentAttemptId != attemptId) {
-                                Log.d(TAG, "Ignoring onAvailable for stale attempt $attemptId (current: $currentAttemptId)")
-                                return
-                            }
+                val callback =
+                    createNetworkCallback(
+                        cm = cm,
+                        attemptId = attemptId,
+                        continuation = continuation,
+                        emitStatus = ::emitStatus
+                    )
 
-                            Log.d(TAG, "Joined receiver hotspot network successfully: $network")
-                            try {
-                                val bound = cm.bindProcessToNetwork(network)
-                                if (bound) {
-                                    isProcessBound = true
-                                } else {
-                                    Log.w(TAG, "bindProcessToNetwork returned false for $network")
-                                }
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Error binding process to network: ${e.message}")
-                            }
+                val registration =
+                    NetworkCallbackRegistration(
+                        attemptId = attemptId,
+                        callback = callback,
+                        cm = cm
+                    )
 
-                            var resumeTarget: CancellableContinuation<Boolean>? = null
-                            synchronized(stateLock) {
-                                if (currentAttemptId == attemptId && continuation.isActive) {
-                                    activeContinuation = null
-                                    resumeTarget = continuation
-                                }
-                            }
-
-                            if (resumeTarget != null) {
-                                emitStatus("Connected to hotspot! Establishing secure channel...")
-                                resumeTarget?.resume(true)
-                            }
-                        }
-
-                        override fun onUnavailable() {
-                            super.onUnavailable()
-                            if (currentAttemptId != attemptId) {
-                                return
-                            }
-                            Log.w(TAG, "Hotspot network unavailable for attempt $attemptId")
-
-                            var resumeTarget: CancellableContinuation<Boolean>? = null
-                            synchronized(stateLock) {
-                                if (currentAttemptId == attemptId && continuation.isActive) {
-                                    activeContinuation = null
-                                    resumeTarget = continuation
-                                }
-                            }
-                            resumeTarget?.resume(false)
-                        }
-
-                        override fun onLost(network: Network) {
-                            super.onLost(network)
-                            if (currentAttemptId != attemptId) return
-                            Log.d(TAG, "Hotspot network lost: $network")
-                            unbindProcessNetwork()
-                        }
+                /*
+                 * Publish registration before requesting the network
+                 * so release()/a newer attempt can see it.
+                 */
+                synchronized(stateLock) {
+                    if (currentAttemptId != attemptId) {
+                        continuation.resume(false)
+                        return@suspendCancellableCoroutine
                     }
 
-                    val reg = NetworkCallbackRegistration(attemptId, callback, cm)
-                    registration = reg
+                    activeRegistration = registration
+                    activeContinuation = continuation
+                }
 
-                    synchronized(stateLock) {
-                        if (currentAttemptId != attemptId) {
-                            continuation.resume(false)
-                            return@suspendCancellableCoroutine
-                        }
-                        activeRegistration = reg
-                        activeContinuation = continuation
-                    }
+                continuation.invokeOnCancellation {
+                    cleanupAttempt(
+                        attemptId = attemptId,
+                        registration = registration,
+                        continuation = continuation
+                    )
+                }
 
-                    continuation.invokeOnCancellation {
-                        var toCleanup: NetworkCallbackRegistration? = null
-                        synchronized(stateLock) {
-                            if (currentAttemptId == attemptId) {
-                                activeContinuation = null
-                                toCleanup = activeRegistration
-                                activeRegistration = null
-                            }
-                        }
-                        toCleanup?.cleanup()
-                        unbindProcessNetwork()
-                    }
+                /*
+                 * Register safely even if release() races with this call.
+                 */
+                if (!registration.request(request)) {
+                    cleanupAttempt(
+                        attemptId = attemptId,
+                        registration = registration,
+                        continuation = continuation
+                    )
 
-                    try {
-                        cm.requestNetwork(request, callback)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed requesting hotspot network: ${e.message}")
-                        var resumeTarget: CancellableContinuation<Boolean>? = null
-                        synchronized(stateLock) {
-                            if (currentAttemptId == attemptId) {
-                                activeContinuation = null
-                                activeRegistration = null
-                                resumeTarget = if (continuation.isActive) continuation else null
-                            }
-                        }
-                        reg.cleanup()
-                        resumeTarget?.resume(false)
+                    if (continuation.isActive) {
+                        continuation.resume(false)
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception during hotspot connection attempt $attemptId: ${e.message}")
-            null
-        }
-
-        val success = isConnected == true
+        } == true
 
         if (!success) {
-            var regToCleanup: NetworkCallbackRegistration? = null
-            synchronized(stateLock) {
-                if (currentAttemptId == attemptId) {
-                    activeContinuation = null
-                    regToCleanup = activeRegistration
-                    activeRegistration = null
-                }
-            }
-            regToCleanup?.cleanup()
-            registration?.cleanup()
+            cleanupCurrentAttempt(
+                attemptId = attemptId
+            )
+
             unbindProcessNetwork()
         }
 
         return success
     }
 
-    private fun unbindProcessNetwork() {
-        if (isProcessBound) {
-            try {
-                connectivityManager?.bindProcessToNetwork(null)
-            } catch (e: Exception) {
-                Log.w(TAG, "Error clearing process network binding: ${e.message}")
-            } finally {
-                isProcessBound = false
+    private fun createNetworkCallback(
+        cm: ConnectivityManager,
+        attemptId: Long,
+        continuation: CancellableContinuation<Boolean>,
+        emitStatus: (String) -> Unit
+    ): ConnectivityManager.NetworkCallback {
+
+        return object : ConnectivityManager.NetworkCallback() {
+
+            override fun onAvailable(network: Network) {
+                if (!isCurrentAttempt(attemptId)) {
+                    Log.d(
+                        TAG,
+                        "Ignoring stale onAvailable: $attemptId"
+                    )
+                    return
+                }
+
+                var bound = false
+
+                try {
+                    bound = cm.bindProcessToNetwork(network)
+                } catch (e: Exception) {
+                    Log.w(
+                        TAG,
+                        "Failed binding process to network: ${e.message}"
+                    )
+                }
+
+                if (!bound) {
+                    Log.w(
+                        TAG,
+                        "Unable to bind process to network: $network"
+                    )
+
+                    resumeAttempt(
+                        attemptId = attemptId,
+                        continuation = continuation,
+                        success = false
+                    )
+
+                    return
+                }
+
+                isProcessBound = true
+
+                Log.d(
+                    TAG,
+                    "Receiver hotspot connected: $network"
+                )
+
+                emitStatus(
+                    "Connected to hotspot! Establishing secure channel..."
+                )
+
+                resumeAttempt(
+                    attemptId = attemptId,
+                    continuation = continuation,
+                    success = true
+                )
+            }
+
+            override fun onUnavailable() {
+                if (!isCurrentAttempt(attemptId)) {
+                    return
+                }
+
+                Log.w(
+                    TAG,
+                    "Receiver hotspot unavailable: $attemptId"
+                )
+
+                resumeAttempt(
+                    attemptId = attemptId,
+                    continuation = continuation,
+                    success = false
+                )
+            }
+
+            override fun onLost(network: Network) {
+                if (!isCurrentAttempt(attemptId)) {
+                    return
+                }
+
+                Log.d(
+                    TAG,
+                    "Receiver hotspot lost: $network"
+                )
+
+                unbindProcessNetwork()
             }
         }
     }
 
-    /**
-     * Releases active network callbacks, unbinds process network routing, and cancels pending attempts.
-     * Safe to call multiple times (idempotent).
-     */
-    fun release() {
-        var contToResume: CancellableContinuation<Boolean>? = null
-        var regToCleanup: NetworkCallbackRegistration? = null
+    private fun resumeAttempt(
+        attemptId: Long,
+        continuation: CancellableContinuation<Boolean>,
+        success: Boolean
+    ) {
+        var target: CancellableContinuation<Boolean>? = null
 
         synchronized(stateLock) {
-            currentAttemptId = nextAttemptId.incrementAndGet()
-            contToResume = activeContinuation?.takeIf { it.isActive }
+            if (
+                currentAttemptId == attemptId &&
+                activeContinuation === continuation &&
+                continuation.isActive
+            ) {
+                activeContinuation = null
+                target = continuation
+            }
+        }
+
+        target?.resume(success)
+    }
+
+    private fun cleanupAttempt(
+        attemptId: Long,
+        registration: NetworkCallbackRegistration,
+        continuation: CancellableContinuation<Boolean>
+    ) {
+        synchronized(stateLock) {
+            if (
+                currentAttemptId == attemptId &&
+                activeRegistration === registration
+            ) {
+                activeRegistration = null
+                activeContinuation = null
+            }
+        }
+
+        registration.cleanup()
+
+        if (isCurrentAttempt(attemptId)) {
+            unbindProcessNetwork()
+        }
+    }
+
+    private fun cleanupCurrentAttempt(
+        attemptId: Long
+    ) {
+        var registration: NetworkCallbackRegistration? = null
+
+        synchronized(stateLock) {
+            if (currentAttemptId == attemptId) {
+                activeContinuation = null
+                registration = activeRegistration
+                activeRegistration = null
+            }
+        }
+
+        registration?.cleanup()
+    }
+
+    private fun isCurrentAttempt(
+        attemptId: Long
+    ): Boolean {
+        return currentAttemptId == attemptId
+    }
+
+    private fun unbindProcessNetwork() {
+        if (!isProcessBound) {
+            return
+        }
+
+        try {
+            connectivityManager?.bindProcessToNetwork(null)
+        } catch (e: Exception) {
+            Log.w(
+                TAG,
+                "Failed clearing process network: ${e.message}"
+            )
+        } finally {
+            isProcessBound = false
+        }
+    }
+
+    /**
+     * Releases all active resources.
+     *
+     * Safe to call repeatedly.
+     */
+    fun release() {
+        val continuation: CancellableContinuation<Boolean>?
+        val registration: NetworkCallbackRegistration?
+
+        synchronized(stateLock) {
+            currentAttemptId =
+                nextAttemptId.incrementAndGet()
+
+            continuation =
+                activeContinuation?.takeIf { it.isActive }
+
+            registration = activeRegistration
+
             activeContinuation = null
-            regToCleanup = activeRegistration
             activeRegistration = null
         }
 
-        contToResume?.resume(false)
-        regToCleanup?.cleanup()
+        continuation?.resume(false)
+        registration?.cleanup()
+
         unbindProcessNetwork()
     }
 
     private class NetworkCallbackRegistration(
-        val attemptId: Long,
+        private val attemptId: Long,
         val callback: ConnectivityManager.NetworkCallback,
-        private val cm: ConnectivityManager?
+        private val cm: ConnectivityManager
     ) {
-        private val isCleanedUp = AtomicBoolean(false)
+
+        private val cleanedUp = AtomicBoolean(false)
+        private val registered = AtomicBoolean(false)
+
+        /**
+         * Requests the network while handling a cancellation/release race.
+         */
+        fun request(
+            request: NetworkRequest
+        ): Boolean {
+
+            if (cleanedUp.get()) {
+                return false
+            }
+
+            return try {
+                cm.requestNetwork(
+                    request,
+                    callback
+                )
+
+                registered.set(true)
+
+                /*
+                 * release()/cleanup() may have happened while
+                 * requestNetwork() was executing.
+                 */
+                if (cleanedUp.get()) {
+                    unregister()
+                    false
+                } else {
+                    true
+                }
+            } catch (e: Exception) {
+                Log.e(
+                    TAG,
+                    "Network request failed for attempt $attemptId: ${e.message}"
+                )
+
+                false
+            }
+        }
 
         fun cleanup() {
-            if (isCleanedUp.compareAndSet(false, true)) {
-                try {
-                    cm?.unregisterNetworkCallback(callback)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error unregistering network callback for attempt $attemptId: ${e.message}")
-                }
+            if (!cleanedUp.compareAndSet(false, true)) {
+                return
+            }
+
+            unregister()
+        }
+
+        private fun unregister() {
+            if (!registered.compareAndSet(true, false)) {
+                return
+            }
+
+            try {
+                cm.unregisterNetworkCallback(callback)
+            } catch (e: Exception) {
+                Log.w(
+                    TAG,
+                    "Failed unregistering callback for attempt $attemptId: ${e.message}"
+                )
             }
         }
     }
