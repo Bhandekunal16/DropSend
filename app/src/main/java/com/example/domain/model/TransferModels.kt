@@ -45,7 +45,9 @@ data class DiscoveredDevice(
     val bluetoothAddress: String? = null,
     val rssi: Int = 0,
     val isReadyToReceive: Boolean = true,
-    val lastSeenTimestamp: Long = System.currentTimeMillis()
+    val lastSeenTimestamp: Long = System.currentTimeMillis(),
+    val sessionId: String? = null,
+    val discoveryGeneration: Long = 0L
 )
 
 data class TransferFile(

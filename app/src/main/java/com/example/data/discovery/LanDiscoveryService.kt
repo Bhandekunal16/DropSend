@@ -347,6 +347,10 @@ class LanDiscoveryService(private val context: Context) {
                                         lastSeenTimestamp = System.currentTimeMillis()
                                     )
                                     val current = _discoveredDevices.value.toMutableMap()
+                                    val probedKey = current.keys.find { it.startsWith("DROP-") && current[it]?.ipAddress == host && it != id }
+                                    if (probedKey != null) {
+                                        current.remove(probedKey)
+                                    }
                                     current[id] = device
                                     _discoveredDevices.value = current
                                 }
@@ -475,6 +479,10 @@ class LanDiscoveryService(private val context: Context) {
         )
 
         val current = _discoveredDevices.value.toMutableMap()
+        val probedKey = current.keys.find { it.startsWith("DROP-") && current[it]?.ipAddress == host && it != id }
+        if (probedKey != null) {
+            current.remove(probedKey)
+        }
         current[id] = device
         _discoveredDevices.value = current
     }
