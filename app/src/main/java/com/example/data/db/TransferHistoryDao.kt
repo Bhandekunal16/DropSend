@@ -27,6 +27,9 @@ interface TransferHistoryDao {
     """)
     fun getRecentHistory(limit: Int = 100): Flow<List<TransferHistoryEntity>>
 
+    @Query("SELECT * FROM transfer_history ORDER BY timestamp DESC")
+    fun getAllHistory(): Flow<List<TransferHistoryEntity>>
+
     @Query("""
         SELECT *
         FROM transfer_history
