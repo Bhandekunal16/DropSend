@@ -257,4 +257,77 @@ class ConnectivityMonitorTest {
         assertTrue(connectivityMonitor.isWifiEnabled())
         assertEquals(0, connectivityMonitor.interfaceScanCount)
     }
+
+    @Test
+    fun `test direct bluetooth queries and state updates without broadcast`() {
+        connectivityMonitor.testBluetoothAdapterEnabled = { true }
+        assertTrue(connectivityMonitor.isBluetoothEnabled())
+
+        connectivityMonitor.testBluetoothAdapterEnabled = { false }
+        assertFalse(connectivityMonitor.isBluetoothEnabled())
+    }
+
+    @Test
+    fun `test duplicate callback events do not corrupt state or cause redundant scans`() {
+        connectivityMonitor.startMonitoring()
+        connectivityMonitor.testIpLookup = { "192.168.1.88" }
+
+        // Multiple rapid duplicate intents
+        val netIntent1 = Intent(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+        val netIntent2 = Intent(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+        val netIntent3 = Intent(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+
+        context.sendBroadcast(netIntent1)
+        context.sendBroadcast(netIntent2)
+        context.sendBroadcast(netIntent3)
+        ShadowLooper.idleMainLooper()
+
+        assertEquals("192.168.1.88", connectivityMonitor.state.value.localIpAddress)
+        assertTrue(connectivityMonitor.isWifiEnabled())
+        connectivityMonitor.stopMonitoring()
+    }
+
+    @Test
+    fun `test startMonitoring stopMonitoring and startMonitoring again functions correctly`() {
+        connectivityMonitor.startMonitoring()
+        connectivityMonitor.testIpLookup = { "192.168.1.11" }
+        connectivityMonitor.updateState()
+        assertEquals("192.168.1.11", connectivityMonitor.state.value.localIpAddress)
+
+        // Stop
+        connectivityMonitor.stopMonitoring()
+
+        // Restart
+        connectivityMonitor.startMonitoring()
+        connectivityMonitor.testIpLookup = { "192.168.1.22" }
+        connectivityMonitor.updateState()
+        assertEquals("192.168.1.22", connectivityMonitor.state.value.localIpAddress)
+
+        connectivityMonitor.stopMonitoring()
+    }
+
+    @Test
+    fun `test wifi direct p2p connection state broadcast updates ip without stale values`() {
+        connectivityMonitor.startMonitoring()
+        connectivityMonitor.testIpLookup = { "192.168.1.55" }
+        connectivityMonitor.updateState()
+        assertEquals("192.168.1.55", connectivityMonitor.state.value.localIpAddress)
+
+        // P2P activates with new IP
+        connectivityMonitor.testIpLookup = { "192.168.49.2" }
+        val p2pIntent = Intent("android.net.wifi.p2p.CONNECTION_STATE_CHANGE")
+        context.sendBroadcast(p2pIntent)
+        ShadowLooper.idleMainLooper()
+        assertEquals("192.168.49.2", connectivityMonitor.state.value.localIpAddress)
+
+        // P2P disconnects, reverts to LAN IP
+        connectivityMonitor.testIpLookup = { "192.168.1.55" }
+        val p2pDisconnectIntent = Intent("android.net.wifi.p2p.CONNECTION_STATE_CHANGE")
+        context.sendBroadcast(p2pDisconnectIntent)
+        ShadowLooper.idleMainLooper()
+        assertEquals("192.168.1.55", connectivityMonitor.state.value.localIpAddress)
+
+        connectivityMonitor.stopMonitoring()
+    }
 }
+

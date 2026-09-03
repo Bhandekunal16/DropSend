@@ -18,8 +18,8 @@ import android.util.Log
 import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.NetworkInterface
+import java.util.concurrent.atomic.AtomicLong
 
 data class ConnectivityState(
     val isBluetoothOn: Boolean = false,
@@ -50,7 +51,6 @@ class ConnectivityMonitor(
     val state: StateFlow<ConnectivityState> = _state.asStateFlow()
 
     private val monitoringLock = Any()
-    private val stateLock = Any()
 
     @Volatile
     private var isMonitoring = false
@@ -62,20 +62,25 @@ class ConnectivityMonitor(
     private var cachedWifiOn: Boolean? = null
 
     @Volatile
-    private var cachedNetwork: Network? = null
+    private var cachedP2pOrHotspotActive = false
+
+    @Volatile
+    private var currentNetwork: Network? = null
+
+    @Volatile
+    private var currentWifiNetwork: Network? = null
 
     @Volatile
     private var cachedIpAddress: String? = null
 
-    @Volatile
-    private var currentWifiNetwork: Network? = null
+    private val updateGeneration = AtomicLong(0)
 
     private var btAndWifiReceiver: BroadcastReceiver? = null
     private var defaultNetworkCallback: ConnectivityManager.NetworkCallback? = null
     private var wifiNetworkCallback: ConnectivityManager.NetworkCallback? = null
 
-    private val updateScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var pendingAsyncUpdate: Job? = null
+    private val updateJob = SupervisorJob()
+    private val updateScope = CoroutineScope(Dispatchers.IO + updateJob)
 
     @VisibleForTesting
     internal var testIpLookup: (() -> String?)? = null
@@ -86,13 +91,19 @@ class ConnectivityMonitor(
     @VisibleForTesting
     internal var interfaceScanCount = 0
 
+    /**
+     * Computes the initial connectivity state on object construction.
+     * Uses fast-path lookups only to ensure instant initialization without blocking the main thread.
+     */
     private fun computeInitialState(): ConnectivityState {
         val bluetoothOn = queryBluetoothEnabled()
-        val wifiOn = isWifiEnabled()
-        val ip = if (wifiOn) getLocalIpAddress() else null
-        cachedNetwork = connectivityManager?.activeNetwork
+        val wifiOn = isWifiEnabledFast()
+        val ip = if (wifiOn) getFastLocalIpAddress() else null
+        val active = connectivityManager?.activeNetwork
+        currentNetwork = active
         cachedIpAddress = ip
         cachedBluetoothOn = bluetoothOn
+        cachedWifiOn = wifiOn
         return ConnectivityState(
             isBluetoothOn = bluetoothOn,
             isWifiOn = wifiOn,
@@ -102,7 +113,7 @@ class ConnectivityMonitor(
 
     /**
      * Checks whether Bluetooth adapter is currently powered on and enabled.
-     * Uses BluetoothManager.adapter (never BluetoothAdapter.getDefaultAdapter)
+     * Uses BluetoothManager.adapter (never deprecated BluetoothAdapter.getDefaultAdapter)
      * and safely handles SecurityException on Android 12+.
      */
     fun isBluetoothEnabled(): Boolean {
@@ -126,85 +137,40 @@ class ConnectivityMonitor(
 
     /**
      * Checks whether Wi-Fi radio is enabled or connected to a Wi-Fi/Ethernet/P2P/Hotspot network.
-     * Evaluates cheapest reliable checks first:
-     * 1. WifiManager state
-     * 2. ConnectivityManager active network capabilities
-     * 3. Fallback to active local network interfaces (Wi-Fi Direct, AP, etc.)
+     * Evaluates cached states first (O(1)), then WifiManager radio state, then active network capabilities,
+     * falling back to checking for active local interfaces (P2P/Hotspot) only when necessary.
      */
     fun isWifiEnabled(): Boolean {
         val cached = cachedWifiOn
         if (cached != null && isMonitoring) {
-            if (!cached) {
-                return hasActiveHotspotOrP2pInterface()
-            }
+            return cached || cachedP2pOrHotspotActive
+        }
+        if (isWifiEnabledFast()) {
             return true
         }
-
-        // 1. WifiManager radio switch check (cheapest)
-        try {
-            val wm = wifiManager
-            if (wm != null) {
-                val state = wm.wifiState
-                if (state == WifiManager.WIFI_STATE_ENABLED) {
-                    return true
-                }
-                if (state == WifiManager.WIFI_STATE_DISABLED || state == WifiManager.WIFI_STATE_DISABLING) {
-                    // Wi-Fi radio is explicitly powered off.
-                    // Check if Hotspot or Wi-Fi Direct (P2P) interface is active
-                    return hasActiveHotspotOrP2pInterface()
-                }
-                if (wm.isWifiEnabled) {
-                    return true
-                }
-            }
-        } catch (_: SecurityException) {
-        } catch (_: Exception) {
-        }
-
-        // 2. ConnectivityManager active network check (Wi-Fi or Ethernet)
-        try {
-            val cm = connectivityManager
-            val active = cm?.activeNetwork
-            if (active != null) {
-                val caps = cm.getNetworkCapabilities(active)
-                if (caps != null && (
-                        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-                    )
-                ) {
-                    return true
-                }
-            }
-        } catch (_: SecurityException) {
-        } catch (_: Exception) {
-        }
-
-        // 3. Fallback to local hotspot or P2P interfaces
         return hasActiveHotspotOrP2pInterface()
     }
 
     /**
      * Fast-path Wi-Fi check without enumerating network interfaces.
+     * Evaluates cached state, WifiManager radio switch, and ConnectivityManager transport capabilities.
      */
     private fun isWifiEnabledFast(): Boolean {
         val cached = cachedWifiOn
         if (cached != null && isMonitoring) {
             return cached
         }
+        return queryWifiRadioOrNetworkActive()
+    }
 
+    private fun queryWifiRadioOrNetworkActive(): Boolean {
         try {
             val wm = wifiManager
             if (wm != null) {
                 val state = wm.wifiState
-                if (state == WifiManager.WIFI_STATE_ENABLED) {
-                    return true
-                }
-                if (state == WifiManager.WIFI_STATE_DISABLED || state == WifiManager.WIFI_STATE_DISABLING) {
-                    return false
-                }
-                if (wm.isWifiEnabled) {
-                    return true
-                }
+                if (state == WifiManager.WIFI_STATE_ENABLED) return true
+                if (state == WifiManager.WIFI_STATE_DISABLED || state == WifiManager.WIFI_STATE_DISABLING) return false
+                if (wm.isWifiEnabled) return true
             }
         } catch (_: Exception) {
         }
@@ -229,8 +195,8 @@ class ConnectivityMonitor(
     }
 
     /**
-     * Checks whether any local P2P or AP interface is up and has an IPv4 address.
-     * Only invoked when cheap radio and active network checks return false.
+     * Checks whether any local P2P or AP interface is up and has a valid IPv4 address.
+     * Only executed as a fallback when cheap radio and active network checks return false.
      */
     private fun hasActiveHotspotOrP2pInterface(): Boolean {
         try {
@@ -258,6 +224,29 @@ class ConnectivityMonitor(
     }
 
     /**
+     * Fast-path local IPv4 lookup via LinkProperties only (zero interface enumeration).
+     */
+    private fun getFastLocalIpAddress(): String? {
+        testIpLookup?.let { return it.invoke() }
+
+        val cm = connectivityManager ?: return null
+        val active = cm.activeNetwork ?: return null
+        try {
+            val caps = cm.getNetworkCapabilities(active)
+            if (caps != null && (
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+                )
+            ) {
+                val linkProps = cm.getLinkProperties(active)
+                return extractIpv4FromLinkProperties(linkProps)
+            }
+        } catch (_: Exception) {
+        }
+        return null
+    }
+
+    /**
      * Finds the current primary local IPv4 address across active Wi-Fi, Ethernet, Hotspot, and P2P interfaces.
      * Uses ConnectivityManager LinkProperties as the fast path, falling back to a single-pass
      * prioritized interface scan when LinkProperties is unavailable or refers to cellular.
@@ -265,41 +254,57 @@ class ConnectivityMonitor(
     fun getLocalIpAddress(): String? {
         testIpLookup?.let { return it.invoke() }
 
-        // 1. Fast path: check activeNetwork LinkProperties
-        try {
-            val cm = connectivityManager
-            val active = cm?.activeNetwork
-            if (active != null) {
-                val caps = cm.getNetworkCapabilities(active)
+        // 1. Check cached IP if network identity is still current
+        val active = connectivityManager?.activeNetwork
+        val current = currentNetwork ?: active
+        val cached = cachedIpAddress
+        if (cached != null && current != null && current == currentNetwork) {
+            return cached
+        }
+
+        // 2. Fast path: check activeNetwork LinkProperties
+        val cm = connectivityManager
+        if (current != null && cm != null) {
+            try {
+                val caps = cm.getNetworkCapabilities(current)
                 if (caps != null && (
                         caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
                             caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
                     )
                 ) {
-                    val linkProps = cm.getLinkProperties(active)
+                    val linkProps = cm.getLinkProperties(current)
                     val ip = extractIpv4FromLinkProperties(linkProps)
-                    if (!ip.isNullOrBlank()) {
+                    if (ip != null) {
+                        currentNetwork = current
+                        cachedIpAddress = ip
                         return ip
                     }
                 }
+            } catch (_: Exception) {
             }
-        } catch (_: Exception) {
         }
 
-        // 2. Wi-Fi callback network (if activeNetwork is Cellular or null)
-        currentWifiNetwork?.let { wifiNet ->
+        // 3. Wi-Fi callback network (if activeNetwork is Cellular or null)
+        val wifiNet = currentWifiNetwork
+        if (wifiNet != null && cm != null) {
             try {
-                val linkProps = connectivityManager?.getLinkProperties(wifiNet)
+                val linkProps = cm.getLinkProperties(wifiNet)
                 val ip = extractIpv4FromLinkProperties(linkProps)
-                if (!ip.isNullOrBlank()) {
+                if (ip != null) {
+                    currentNetwork = wifiNet
+                    cachedIpAddress = ip
                     return ip
                 }
             } catch (_: Exception) {
             }
         }
 
-        // 3. Fallback: single-pass prioritized scan across network interfaces (Wi-Fi Direct, AP, etc.)
-        return scanInterfacesForLocalIp()
+        // 4. Fallback: single-pass prioritized scan across network interfaces (Wi-Fi Direct, AP, etc.)
+        return scanInterfacesForLocalIp().also {
+            if (it != null) {
+                cachedIpAddress = it
+            }
+        }
     }
 
     private fun extractIpv4FromLinkProperties(linkProperties: LinkProperties?): String? {
@@ -350,8 +355,7 @@ class ConnectivityMonitor(
                         val host = addr.hostAddress
                         if (!host.isNullOrBlank() && host != "0.0.0.0") {
                             if (priority == 5) {
-                                // WLAN is the highest priority - early return immediately
-                                return host
+                                return host // WLAN is highest priority - early return immediately
                             }
                             bestPriority = priority
                             bestIp = host
@@ -370,131 +374,120 @@ class ConnectivityMonitor(
         addr is Inet4Address && !addr.isLoopbackAddress && !addr.isAnyLocalAddress
 
     /**
-     * Updates the current state and emits to [state] if changed.
-     * Thread-safe: can be called from any thread.
+     * Publishes a new connectivity state to [state] atomically if different from current value.
      */
-    fun updateState() {
-        val fastResolved = tryUpdateStateFast()
-        if (!fastResolved) {
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                scheduleAsyncUpdate()
-            } else {
-                performFullStateUpdate()
-            }
+    private fun publishState(isBluetoothOn: Boolean, isWifiOn: Boolean, localIpAddress: String?) {
+        val newState = ConnectivityState(
+            isBluetoothOn = isBluetoothOn,
+            isWifiOn = isWifiOn,
+            localIpAddress = localIpAddress,
+        )
+        _state.update { current ->
+            if (current == newState) current else newState
         }
     }
 
-    private fun tryUpdateStateFast(): Boolean {
+    /**
+     * Updates the current state and emits to [state] if changed.
+     * Performs fast evaluation first. If expensive interface scans are needed:
+     * - Dispatches asynchronously if invoked on the main thread (avoids UI jank).
+     * - Executes synchronously if invoked on a background/worker thread.
+     */
+    fun updateState() {
         val bluetoothOn = isBluetoothEnabled()
 
         if (testIpLookup != null) {
             val ip = testIpLookup!!.invoke()
             cachedIpAddress = ip
-            val isWifi = isWifiEnabled() || ip != null
-            synchronized(stateLock) {
-                val newState = ConnectivityState(
-                    isBluetoothOn = bluetoothOn,
-                    isWifiOn = isWifi,
-                    localIpAddress = ip,
-                )
-                if (_state.value != newState) {
-                    _state.value = newState
-                }
-            }
-            return true
+            val isWifi = isWifiEnabledFast() || isWifiEnabled() || ip != null
+            publishState(bluetoothOn, isWifi, ip)
+            return
         }
 
         val isWifiFast = isWifiEnabledFast()
-        if (!isWifiFast) {
-            cachedNetwork = null
+        if (!isWifiFast && !cachedP2pOrHotspotActive) {
+            currentNetwork = null
             cachedIpAddress = null
-            synchronized(stateLock) {
-                val newState = ConnectivityState(
-                    isBluetoothOn = bluetoothOn,
-                    isWifiOn = false,
-                    localIpAddress = null,
+            publishState(bluetoothOn, false, null)
+            return
+        }
+
+        // Fast path: attempt to resolve IP from current or active network LinkProperties
+        val cm = connectivityManager
+        val active = cm?.activeNetwork
+        val current = currentNetwork ?: active
+        if (current != null && cm != null) {
+            val caps = try { cm.getNetworkCapabilities(current) } catch (_: Exception) { null }
+            if (caps != null && (
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
                 )
-                if (_state.value != newState) {
-                    _state.value = newState
+            ) {
+                val linkProps = try { cm.getLinkProperties(current) } catch (_: Exception) { null }
+                val ip = extractIpv4FromLinkProperties(linkProps)
+                if (ip != null) {
+                    currentNetwork = current
+                    cachedIpAddress = ip
+                    publishState(bluetoothOn, true, ip)
+                    return
                 }
             }
-            return true
         }
 
-        val activeNetwork = connectivityManager?.activeNetwork
-        val cached = cachedIpAddress
-
-        val resolvedIp = if (cached != null && activeNetwork != null && activeNetwork == cachedNetwork) {
-            cached
-        } else if (activeNetwork != null) {
-            val linkProps = connectivityManager?.getLinkProperties(activeNetwork)
+        // Secondary fast check: currentWifiNetwork (if activeNetwork was cellular or null)
+        val wifiNet = currentWifiNetwork
+        if (wifiNet != null && cm != null) {
+            val linkProps = try { cm.getLinkProperties(wifiNet) } catch (_: Exception) { null }
             val ip = extractIpv4FromLinkProperties(linkProps)
             if (ip != null) {
-                cachedNetwork = activeNetwork
+                currentNetwork = wifiNet
                 cachedIpAddress = ip
-                ip
-            } else {
-                return false
+                publishState(bluetoothOn, true, ip)
+                return
             }
+        }
+
+        // Fallback: interface enumeration required (e.g. Wi-Fi Direct or Local Hotspot)
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            scheduleAsyncFallbackUpdate()
         } else {
-            return false
-        }
-
-        synchronized(stateLock) {
-            val newState = ConnectivityState(
-                isBluetoothOn = bluetoothOn,
-                isWifiOn = isWifiFast,
-                localIpAddress = resolvedIp,
-            )
-            if (_state.value != newState) {
-                _state.value = newState
-            }
-        }
-        return true
-    }
-
-    private fun scheduleAsyncUpdate() {
-        synchronized(stateLock) {
-            pendingAsyncUpdate?.cancel()
-            pendingAsyncUpdate = updateScope.launch {
-                performFullStateUpdate()
-            }
+            performFallbackScanUpdate()
         }
     }
 
-    private fun performFullStateUpdate() {
+    private fun scheduleAsyncFallbackUpdate() {
+        val gen = updateGeneration.incrementAndGet()
+        updateScope.launch {
+            val ip = scanInterfacesForLocalIp()
+            if (updateGeneration.get() != gen) {
+                return@launch // Discard stale scan result from older generation
+            }
+            val bluetoothOn = isBluetoothEnabled()
+            val isWifi = isWifiEnabled() || ip != null
+            if (ip != null) {
+                cachedIpAddress = ip
+            }
+            publishState(bluetoothOn, isWifi, ip)
+        }
+    }
+
+    private fun performFallbackScanUpdate() {
+        val gen = updateGeneration.incrementAndGet()
+        val ip = scanInterfacesForLocalIp()
+        if (updateGeneration.get() != gen) {
+            return // Discard stale scan result from older generation
+        }
         val bluetoothOn = isBluetoothEnabled()
-        val wifiOn = isWifiEnabled()
-        val activeNetwork = connectivityManager?.activeNetwork
-
-        val ip = if (!wifiOn) {
-            cachedNetwork = null
-            cachedIpAddress = null
-            null
-        } else {
-            val cached = cachedIpAddress
-            if (cached != null && activeNetwork != null && activeNetwork == cachedNetwork) {
-                cached
-            } else {
-                val freshIp = getLocalIpAddress()
-                cachedNetwork = activeNetwork
-                cachedIpAddress = freshIp
-                freshIp
-            }
+        val isWifi = isWifiEnabled() || ip != null
+        if (ip != null) {
+            cachedIpAddress = ip
         }
-
-        synchronized(stateLock) {
-            val newState = ConnectivityState(
-                isBluetoothOn = bluetoothOn,
-                isWifiOn = wifiOn,
-                localIpAddress = ip,
-            )
-            if (_state.value != newState) {
-                _state.value = newState
-            }
-        }
+        publishState(bluetoothOn, isWifi, ip)
     }
 
+    /**
+     * Starts active connectivity monitoring. Idempotent.
+     */
     fun startMonitoring() {
         synchronized(monitoringLock) {
             if (isMonitoring) return
@@ -503,23 +496,21 @@ class ConnectivityMonitor(
 
         updateState()
 
-        // 1. Broadcast Receiver for radio, P2P, and hotspot state changes
+        // 1. Broadcast Receiver for radio state and local AP/P2P transitions
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (!isMonitoring || intent == null) return
                 when (intent.action) {
                     BluetoothAdapter.ACTION_STATE_CHANGED -> {
-                        val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
-                        val isEnabled = when (state) {
+                        val extraState = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                        val isEnabled = when (extraState) {
                             BluetoothAdapter.STATE_ON -> true
                             BluetoothAdapter.STATE_OFF, BluetoothAdapter.STATE_TURNING_OFF -> false
                             else -> queryBluetoothEnabled()
                         }
                         cachedBluetoothOn = isEnabled
-                        synchronized(stateLock) {
-                            _state.update { current ->
-                                if (current.isBluetoothOn != isEnabled) current.copy(isBluetoothOn = isEnabled) else current
-                            }
+                        _state.update { current ->
+                            if (current.isBluetoothOn != isEnabled) current.copy(isBluetoothOn = isEnabled) else current
                         }
                     }
                     BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED -> {
@@ -529,18 +520,33 @@ class ConnectivityMonitor(
                         val wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)
                         if (wifiState == WifiManager.WIFI_STATE_DISABLED) {
                             cachedWifiOn = false
-                            cachedNetwork = null
+                            currentNetwork = null
                             cachedIpAddress = null
-                            updateState()
+                            if (!cachedP2pOrHotspotActive) {
+                                publishState(isBluetoothEnabled(), false, null)
+                            } else {
+                                updateState()
+                            }
                         } else if (wifiState == WifiManager.WIFI_STATE_ENABLED) {
                             cachedWifiOn = true
                             updateState()
                         }
                     }
-                    "android.net.wifi.p2p.CONNECTION_STATE_CHANGE",
-                    "android.net.wifi.p2p.STATE_CHANGED",
                     "android.net.wifi.WIFI_AP_STATE_CHANGED" -> {
-                        // Wi-Fi Direct or Local Hotspot interface state changed
+                        val apState = intent.getIntExtra("wifi_state", 14)
+                        cachedP2pOrHotspotActive = (apState == 13) // WIFI_AP_STATE_ENABLED = 13
+                        cachedIpAddress = null
+                        updateGeneration.incrementAndGet()
+                        updateState()
+                    }
+                    "android.net.wifi.p2p.CONNECTION_STATE_CHANGE" -> {
+                        cachedIpAddress = null
+                        updateGeneration.incrementAndGet()
+                        updateState()
+                    }
+                    "android.net.wifi.p2p.STATE_CHANGED" -> {
+                        val p2pState = intent.getIntExtra("wifi_p2p_state", 1)
+                        cachedP2pOrHotspotActive = (p2pState == 2) // WIFI_P2P_STATE_ENABLED = 2
                         cachedIpAddress = null
                         updateState()
                     }
@@ -548,10 +554,12 @@ class ConnectivityMonitor(
                     @Suppress("DEPRECATION")
                     ConnectivityManager.CONNECTIVITY_ACTION -> {
                         cachedIpAddress = null
+                        updateGeneration.incrementAndGet()
                         updateState()
                     }
+                    @Suppress("DEPRECATION")
                     WifiManager.SUPPLICANT_STATE_CHANGED_ACTION -> {
-                        // Handshake in progress; no action needed
+                        // Handshake in progress; ignore
                     }
                     else -> {
                         updateState()
@@ -566,6 +574,7 @@ class ConnectivityMonitor(
             addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
             addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+            @Suppress("DEPRECATION")
             addAction(WifiManager.SUPPLICANT_STATE_CHANGED_ACTION)
             @Suppress("DEPRECATION")
             addAction(ConnectivityManager.CONNECTIVITY_ACTION)
@@ -588,44 +597,42 @@ class ConnectivityMonitor(
             }
         }
 
-        // 2. Default Network Callback (Fires whenever default primary network changes)
+        // 2. Default Network Callback (Tracks active internet network transitions)
         try {
-            val callback = object : ConnectivityManager.NetworkCallback() {
+            val defaultCallback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
                     if (!isMonitoring) return
-                    if (network != cachedNetwork) {
-                        cachedNetwork = network
+                    if (network != currentNetwork) {
+                        currentNetwork = network
                         cachedIpAddress = null
+                        updateGeneration.incrementAndGet()
                     }
                     updateState()
                 }
 
                 override fun onLost(network: Network) {
                     if (!isMonitoring) return
-                    if (network == cachedNetwork) {
-                        cachedNetwork = null
+                    if (network == currentNetwork) {
+                        currentNetwork = null
                         cachedIpAddress = null
+                        updateGeneration.incrementAndGet()
+                        updateState()
                     }
-                    updateState()
                 }
 
                 override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
                     if (!isMonitoring) return
                     val ip = extractIpv4FromLinkProperties(linkProperties)
                     if (ip != null) {
-                        cachedNetwork = network
+                        val prevIp = cachedIpAddress
+                        currentNetwork = network
                         cachedIpAddress = ip
-                        synchronized(stateLock) {
-                            val current = _state.value
-                            val newState = current.copy(isWifiOn = isWifiEnabledFast(), localIpAddress = ip)
-                            if (current != newState) {
-                                _state.value = newState
-                            }
+                        if (ip != prevIp || !_state.value.isWifiOn) {
+                            publishState(isBluetoothEnabled(), isWifiEnabledFast(), ip)
                         }
-                    } else {
-                        if (network == cachedNetwork) {
-                            cachedIpAddress = null
-                        }
+                    } else if (network == currentNetwork) {
+                        cachedIpAddress = null
+                        updateGeneration.incrementAndGet()
                         updateState()
                     }
                 }
@@ -635,31 +642,34 @@ class ConnectivityMonitor(
                     val isWifiOrEth = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
                         capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
                     if (isWifiOrEth != _state.value.isWifiOn) {
+                        cachedWifiOn = isWifiOrEth
                         updateState()
                     }
                 }
             }
-            defaultNetworkCallback = callback
+            defaultNetworkCallback = defaultCallback
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                connectivityManager?.registerDefaultNetworkCallback(callback)
+                connectivityManager?.registerDefaultNetworkCallback(defaultCallback)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Default network callback registration error: ${e.message}")
         }
 
-        // 3. Specific Wi-Fi Network Callback (Tracks Wi-Fi even when default network is Cellular)
+        // 3. Wi-Fi Specific Network Callback (Maintains Wi-Fi link when default network is Cellular)
         try {
             val wifiRequest = NetworkRequest.Builder()
                 .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
                 .build()
-            val callback = object : ConnectivityManager.NetworkCallback() {
+            val wifiCallback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
                     if (!isMonitoring) return
                     currentWifiNetwork = network
-                    if (cachedNetwork == null || cachedNetwork != network) {
+                    val active = connectivityManager?.activeNetwork
+                    if (active == null || active != network) {
                         cachedIpAddress = null
+                        updateGeneration.incrementAndGet()
+                        updateState()
                     }
-                    updateState()
                 }
 
                 override fun onLost(network: Network) {
@@ -667,11 +677,12 @@ class ConnectivityMonitor(
                     if (currentWifiNetwork == network) {
                         currentWifiNetwork = null
                     }
-                    if (cachedNetwork == network) {
-                        cachedNetwork = null
+                    if (currentNetwork == network) {
+                        currentNetwork = null
                         cachedIpAddress = null
+                        updateGeneration.incrementAndGet()
+                        updateState()
                     }
-                    updateState()
                 }
 
                 override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
@@ -679,46 +690,42 @@ class ConnectivityMonitor(
                     val ip = extractIpv4FromLinkProperties(linkProperties)
                     if (ip != null) {
                         val active = connectivityManager?.activeNetwork
-                        if (active == null || active == network || cachedNetwork == null || cachedNetwork == network) {
-                            cachedNetwork = network
+                        if (active == null || currentNetwork == null || currentNetwork == network) {
+                            val prevIp = cachedIpAddress
+                            currentNetwork = network
                             cachedIpAddress = ip
-                            synchronized(stateLock) {
-                                val current = _state.value
-                                val newState = current.copy(isWifiOn = true, localIpAddress = ip)
-                                if (current != newState) {
-                                    _state.value = newState
-                                }
+                            if (ip != prevIp || !_state.value.isWifiOn) {
+                                publishState(isBluetoothEnabled(), true, ip)
                             }
                         }
-                    } else {
-                        if (cachedNetwork == network) {
-                            cachedIpAddress = null
-                            updateState()
-                        }
+                    } else if (currentNetwork == network) {
+                        cachedIpAddress = null
+                        updateGeneration.incrementAndGet()
+                        updateState()
                     }
                 }
 
                 override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-                    // Static transport, no-op to avoid redundant work
+                    // Static Wi-Fi transport; no-op to prevent redundant processing
                 }
             }
-            wifiNetworkCallback = callback
-            connectivityManager?.registerNetworkCallback(wifiRequest, callback)
+            wifiNetworkCallback = wifiCallback
+            connectivityManager?.registerNetworkCallback(wifiRequest, wifiCallback)
         } catch (e: Exception) {
             Log.w(TAG, "Wi-Fi network callback registration error: ${e.message}")
         }
     }
 
+    /**
+     * Stops active monitoring, releases all callbacks, receivers, and cancels pending coroutines. Idempotent.
+     */
     fun stopMonitoring() {
         synchronized(monitoringLock) {
             if (!isMonitoring) return
             isMonitoring = false
         }
 
-        synchronized(stateLock) {
-            pendingAsyncUpdate?.cancel()
-            pendingAsyncUpdate = null
-        }
+        updateJob.cancelChildren()
 
         try {
             btAndWifiReceiver?.let { context.unregisterReceiver(it) }
@@ -738,10 +745,11 @@ class ConnectivityMonitor(
         }
         wifiNetworkCallback = null
 
+        currentNetwork = null
         currentWifiNetwork = null
-        cachedNetwork = null
         cachedIpAddress = null
         cachedBluetoothOn = null
         cachedWifiOn = null
+        cachedP2pOrHotspotActive = false
     }
 }
