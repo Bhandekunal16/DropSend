@@ -235,4 +235,36 @@ class WifiDiscoveryLifecycleTest {
         assertEquals(1, filtered.size)
         assertEquals("DROP-FRESH", filtered.first().id)
     }
+
+    @Test
+    fun `test stopDiscovery is fully idempotent`() {
+        wifiP2pManager.stopDiscovery()
+        assertEquals(DiscoveryLifecycleState.STOPPED, wifiP2pManager.currentLifecycleState)
+        val genBefore = wifiP2pManager.currentGeneration
+
+        // Calling stopDiscovery again when already STOPPED should be a no-op
+        wifiP2pManager.stopDiscovery()
+        assertEquals(DiscoveryLifecycleState.STOPPED, wifiP2pManager.currentLifecycleState)
+        assertEquals(genBefore, wifiP2pManager.currentGeneration)
+    }
+
+    @Test
+    fun `test clearPeers empties discovered peers`() {
+        val gen = wifiP2pManager.startDiscovery()
+        wifiP2pManager.setLifecycleStateForTesting(DiscoveryLifecycleState.ACTIVE)
+        wifiP2pManager.injectPeersForTesting(
+            gen,
+            listOf(
+                DiscoveredDevice(
+                    id = "P2P-TEST",
+                    name = "Test Peer",
+                    transportType = TransportType.WIFI_DIRECT,
+                )
+            )
+        )
+        assertEquals(1, wifiP2pManager.discoveredPeers.value.size)
+
+        wifiP2pManager.clearPeers()
+        assertTrue(wifiP2pManager.discoveredPeers.value.isEmpty())
+    }
 }
