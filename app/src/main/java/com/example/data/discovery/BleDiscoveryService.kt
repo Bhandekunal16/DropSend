@@ -28,10 +28,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 import kotlin.math.abs
 
-class BleDiscoveryService(private val context: Context) {
-
+class BleDiscoveryService(
+    private val context: Context,
+) {
     companion object {
         private const val TAG = "BleDiscoveryService"
+
         // DropSend 16-bit / 128-bit UUID for BLE Discovery
         val SERVICE_UUID: UUID = UUID.fromString("0000FD88-0000-1000-8000-00805F9B34FB")
         val PARCEL_UUID = ParcelUuid(SERVICE_UUID)
@@ -86,7 +88,11 @@ class BleDiscoveryService(private val context: Context) {
      * Extracts the last [count] characters of a Bluetooth MAC address skipping colons,
      * avoiding regex or substring allocations.
      */
-    private fun extractAddressSuffix(address: String, count: Int, prefix: String = ""): String {
+    private fun extractAddressSuffix(
+        address: String,
+        count: Int,
+        prefix: String = "",
+    ): String {
         val chars = CharArray(count)
         var filled = 0
         for (i in address.length - 1 downTo 0) {
@@ -106,14 +112,18 @@ class BleDiscoveryService(private val context: Context) {
      * state has actually changed.
      */
     private fun publishDevices() {
-        val snapshot: Map<String, DiscoveredDevice> = synchronized(cacheLock) {
-            HashMap(deviceCache)
-        }
+        val snapshot: Map<String, DiscoveredDevice> =
+            synchronized(cacheLock) {
+                HashMap(deviceCache)
+            }
         _discoveredDevices.value = snapshot
     }
 
     @SuppressLint("MissingPermission")
-    fun startAdvertising(localDeviceId: String, localDeviceName: String) {
+    fun startAdvertising(
+        localDeviceId: String,
+        localDeviceName: String,
+    ) {
         if (!isBluetoothEnabled) return
 
         synchronized(advertiseStateLock) {
@@ -129,40 +139,47 @@ class BleDiscoveryService(private val context: Context) {
             }
 
             // Balanced advertise mode and medium TX power to optimize battery and radio coexistence
-            val settings = AdvertiseSettings.Builder()
-                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
-                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
-                .setConnectable(true)
-                .setTimeout(0)
-                .build()
+            val settings =
+                AdvertiseSettings
+                    .Builder()
+                    .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+                    .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+                    .setConnectable(true)
+                    .setTimeout(0)
+                    .build()
 
             // Keep advertising payload compact (< 31 bytes)
             val serviceData = localDeviceId.toByteArray(Charsets.UTF_8)
-            val data = AdvertiseData.Builder()
-                .setIncludeDeviceName(false)
-                .setIncludeTxPowerLevel(false)
-                .addServiceUuid(PARCEL_UUID)
-                .addServiceData(PARCEL_UUID, serviceData)
-                .build()
+            val data =
+                AdvertiseData
+                    .Builder()
+                    .setIncludeDeviceName(false)
+                    .setIncludeTxPowerLevel(false)
+                    .addServiceUuid(PARCEL_UUID)
+                    .addServiceData(PARCEL_UUID, serviceData)
+                    .build()
 
-            val scanResponse = AdvertiseData.Builder()
-                .setIncludeDeviceName(true)
-                .build()
+            val scanResponse =
+                AdvertiseData
+                    .Builder()
+                    .setIncludeDeviceName(true)
+                    .build()
 
-            val callback = object : AdvertiseCallback() {
-                override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                    Log.d(TAG, "BLE Advertising started successfully for $localDeviceId ($localDeviceName)")
-                }
+            val callback =
+                object : AdvertiseCallback() {
+                    override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+                        Log.d(TAG, "BLE Advertising started successfully for $localDeviceId ($localDeviceName)")
+                    }
 
-                override fun onStartFailure(errorCode: Int) {
-                    Log.e(TAG, "BLE Advertising failed with error: $errorCode")
-                    synchronized(advertiseStateLock) {
-                        isAdvertising = false
-                        currentAdvertisingId = null
-                        currentAdvertisingName = null
+                    override fun onStartFailure(errorCode: Int) {
+                        Log.e(TAG, "BLE Advertising failed with error: $errorCode")
+                        synchronized(advertiseStateLock) {
+                            isAdvertising = false
+                            currentAdvertisingId = null
+                            currentAdvertisingName = null
+                        }
                     }
                 }
-            }
 
             advertiseCallback = callback
 
@@ -239,21 +256,23 @@ class BleDiscoveryService(private val context: Context) {
                         val deviceId = extractAddressSuffix(address, 6, "BT-")
                         if (!deviceCache.containsKey(deviceId)) {
                             val devName = dev.name ?: "Paired Device (${address.takeLast(5)})"
-                            val discovered = DiscoveredDevice(
-                                id = deviceId,
-                                name = "$devName (Paired)",
-                                transportType = TransportType.BLUETOOTH,
-                                bluetoothAddress = address,
-                                isReadyToReceive = true,
-                                lastSeenTimestamp = now,
-                            )
+                            val discovered =
+                                DiscoveredDevice(
+                                    id = deviceId,
+                                    name = "$devName (Paired)",
+                                    transportType = TransportType.BLUETOOTH,
+                                    bluetoothAddress = address,
+                                    isReadyToReceive = true,
+                                    lastSeenTimestamp = now,
+                                )
                             deviceCache[deviceId] = discovered
                             addressToId[address] = deviceId
-                            deviceMeta[deviceId] = DeviceMetadata(
-                                lastPublishedTimestamp = now,
-                                lastPublishedRssi = 0,
-                                hasMeaningfulName = true,
-                            )
+                            deviceMeta[deviceId] =
+                                DeviceMetadata(
+                                    lastPublishedTimestamp = now,
+                                    lastPublishedRssi = 0,
+                                    hasMeaningfulName = true,
+                                )
                             addedAny = true
                         }
                     }
@@ -273,47 +292,55 @@ class BleDiscoveryService(private val context: Context) {
         if (scanner == null) return
 
         // Hardware filtering using DropSend PARCEL_UUID
-        val scanFilters = listOf(
-            ScanFilter.Builder()
-                .setServiceUuid(PARCEL_UUID)
-                .build(),
-        )
+        val scanFilters =
+            listOf(
+                ScanFilter
+                    .Builder()
+                    .setServiceUuid(PARCEL_UUID)
+                    .build(),
+            )
 
         // Balanced scan mode and aggressive match mode for fast, battery-efficient discovery
-        val scanSettings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-            .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
-            .setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
-            .setReportDelay(0)
-            .build()
+        val scanSettings =
+            ScanSettings
+                .Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
+                .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+                .setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
+                .setReportDelay(0)
+                .build()
 
-        val callback = object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, result: ScanResult?) {
-                if (!isScanning || result == null) return
-                if (processScanResult(result)) {
-                    publishDevices()
-                }
-            }
-
-            override fun onBatchScanResults(results: MutableList<ScanResult>?) {
-                if (!isScanning || results.isNullOrEmpty()) return
-                var hasChanges = false
-                for (result in results) {
-                    if (!isScanning) return
+        val callback =
+            object : ScanCallback() {
+                override fun onScanResult(
+                    callbackType: Int,
+                    result: ScanResult?,
+                ) {
+                    if (!isScanning || result == null) return
                     if (processScanResult(result)) {
-                        hasChanges = true
+                        publishDevices()
                     }
                 }
-                if (hasChanges) {
-                    publishDevices()
+
+                override fun onBatchScanResults(results: MutableList<ScanResult>?) {
+                    if (!isScanning || results.isNullOrEmpty()) return
+                    var hasChanges = false
+                    for (result in results) {
+                        if (!isScanning) return
+                        if (processScanResult(result)) {
+                            hasChanges = true
+                        }
+                    }
+                    if (hasChanges) {
+                        publishDevices()
+                    }
+                }
+
+                override fun onScanFailed(errorCode: Int) {
+                    Log.e(TAG, "BLE Scan failed: $errorCode")
                 }
             }
-
-            override fun onScanFailed(errorCode: Int) {
-                Log.e(TAG, "BLE Scan failed: $errorCode")
-            }
-        }
 
         scanCallback = callback
 
@@ -349,16 +376,18 @@ class BleDiscoveryService(private val context: Context) {
 
         if (existingId != null && existingDevice != null && meta != null) {
             val rawName = result.scanRecord?.deviceName ?: device.name
-            val hasNewMeaningfulName = !meta.hasMeaningfulName &&
-                !rawName.isNullOrBlank() &&
-                !rawName.startsWith("DROP-")
+            val hasNewMeaningfulName =
+                !meta.hasMeaningfulName &&
+                    !rawName.isNullOrBlank() &&
+                    !rawName.startsWith("DROP-")
 
             val rssiDiff = abs(result.rssi - meta.lastPublishedRssi)
             val timeSinceLastPublish = now - meta.lastPublishedTimestamp
 
-            val shouldUpdate = hasNewMeaningfulName ||
-                (rssiDiff >= RSSI_UPDATE_THRESHOLD_DB && timeSinceLastPublish >= RSSI_THROTTLE_MS) ||
-                (timeSinceLastPublish >= HEARTBEAT_UPDATE_INTERVAL_MS)
+            val shouldUpdate =
+                hasNewMeaningfulName ||
+                    (rssiDiff >= RSSI_UPDATE_THRESHOLD_DB && timeSinceLastPublish >= RSSI_THROTTLE_MS) ||
+                    (timeSinceLastPublish >= HEARTBEAT_UPDATE_INTERVAL_MS)
 
             if (!shouldUpdate) {
                 // Hot path: drop repeated advertisement with zero object allocations
@@ -366,11 +395,12 @@ class BleDiscoveryService(private val context: Context) {
             }
 
             val updatedName = if (hasNewMeaningfulName && !rawName.isNullOrBlank()) rawName else existingDevice.name
-            val updatedDevice = existingDevice.copy(
-                name = updatedName,
-                rssi = result.rssi,
-                lastSeenTimestamp = now,
-            )
+            val updatedDevice =
+                existingDevice.copy(
+                    name = updatedName,
+                    rssi = result.rssi,
+                    lastSeenTimestamp = now,
+                )
 
             synchronized(cacheLock) {
                 deviceCache[existingId!!] = updatedDevice
@@ -389,46 +419,51 @@ class BleDiscoveryService(private val context: Context) {
         val hasUuid = record.serviceUuids?.contains(PARCEL_UUID) == true
         val devName = record.deviceName ?: device.name ?: ""
 
-        val isDropSendDevice = (serviceData != null && serviceData.isNotEmpty()) ||
-            hasUuid ||
-            devName.startsWith("DROP-") ||
-            devName.contains("DropSend", ignoreCase = true)
+        val isDropSendDevice =
+            (serviceData != null && serviceData.isNotEmpty()) ||
+                hasUuid ||
+                devName.startsWith("DROP-") ||
+                devName.contains("DropSend", ignoreCase = true)
 
         if (!isDropSendDevice) return false
 
-        val deviceId = if (serviceData != null && serviceData.isNotEmpty()) {
-            String(serviceData, Charsets.UTF_8).trim()
-        } else if (devName.startsWith("DROP-")) {
-            devName.substringBefore(' ')
-        } else {
-            extractAddressSuffix(address, 4, "DROP-")
-        }
+        val deviceId =
+            if (serviceData != null && serviceData.isNotEmpty()) {
+                String(serviceData, Charsets.UTF_8).trim()
+            } else if (devName.startsWith("DROP-")) {
+                devName.substringBefore(' ')
+            } else {
+                extractAddressSuffix(address, 4, "DROP-")
+            }
 
         val isMeaningfulName = devName.isNotBlank() && !devName.startsWith("DROP-")
-        val displayName = if (isMeaningfulName) {
-            devName
-        } else {
-            "Nearby Device (${extractAddressSuffix(address, 4, "")})"
-        }
+        val displayName =
+            if (isMeaningfulName) {
+                devName
+            } else {
+                "Nearby Device (${extractAddressSuffix(address, 4, "")})"
+            }
 
-        val discovered = DiscoveredDevice(
-            id = deviceId,
-            name = displayName,
-            transportType = TransportType.BLUETOOTH,
-            bluetoothAddress = address,
-            rssi = result.rssi,
-            isReadyToReceive = true,
-            lastSeenTimestamp = now,
-        )
+        val discovered =
+            DiscoveredDevice(
+                id = deviceId,
+                name = displayName,
+                transportType = TransportType.BLUETOOTH,
+                bluetoothAddress = address,
+                rssi = result.rssi,
+                isReadyToReceive = true,
+                lastSeenTimestamp = now,
+            )
 
         synchronized(cacheLock) {
             addressToId[address] = deviceId
             deviceCache[deviceId] = discovered
-            deviceMeta[deviceId] = DeviceMetadata(
-                lastPublishedTimestamp = now,
-                lastPublishedRssi = result.rssi,
-                hasMeaningfulName = isMeaningfulName,
-            )
+            deviceMeta[deviceId] =
+                DeviceMetadata(
+                    lastPublishedTimestamp = now,
+                    lastPublishedRssi = result.rssi,
+                    hasMeaningfulName = isMeaningfulName,
+                )
         }
         return true
     }
@@ -437,61 +472,68 @@ class BleDiscoveryService(private val context: Context) {
     private fun startClassicDiscovery() {
         try {
             if (classicReceiver == null) {
-                val receiver = object : BroadcastReceiver() {
-                    override fun onReceive(context: Context?, intent: Intent?) {
-                        if (!isScanning) return
-                        if (intent?.action == BluetoothDevice.ACTION_FOUND) {
-                            val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                            } else {
-                                @Suppress("DEPRECATION")
-                                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                            }
-                            val address = device?.address ?: return
-                            val deviceId = extractAddressSuffix(address, 6, "BT-")
-                            val now = System.currentTimeMillis()
+                val receiver =
+                    object : BroadcastReceiver() {
+                        override fun onReceive(
+                            context: Context?,
+                            intent: Intent?,
+                        ) {
+                            if (!isScanning) return
+                            if (intent?.action == BluetoothDevice.ACTION_FOUND) {
+                                val device: BluetoothDevice? =
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                                    } else {
+                                        @Suppress("DEPRECATION")
+                                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                                    }
+                                val address = device?.address ?: return
+                                val deviceId = extractAddressSuffix(address, 6, "BT-")
+                                val now = System.currentTimeMillis()
 
-                            // Deduplication: prevent repeated processing of the same device
-                            val shouldUpdate: Boolean
-                            synchronized(cacheLock) {
-                                val meta = deviceMeta[deviceId]
-                                shouldUpdate = (meta == null) || (now - meta.lastPublishedTimestamp >= HEARTBEAT_UPDATE_INTERVAL_MS)
-                            }
-                            if (!shouldUpdate) return
-
-                            val devName = device?.name ?: intent.getStringExtra(BluetoothDevice.EXTRA_NAME)
-                            val devRssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).toInt()
-                            val displayName = devName?.ifBlank { null } ?: "Bluetooth Device (${address.takeLast(5)})"
-
-                            val discovered = DiscoveredDevice(
-                                id = deviceId,
-                                name = displayName,
-                                transportType = TransportType.BLUETOOTH,
-                                bluetoothAddress = address,
-                                rssi = if (devRssi != Short.MIN_VALUE.toInt()) devRssi else -65,
-                                isReadyToReceive = true,
-                                lastSeenTimestamp = now,
-                            )
-
-                            synchronized(cacheLock) {
-                                deviceCache[deviceId] = discovered
-                                addressToId[address] = deviceId
-                                val meta = deviceMeta[deviceId]
-                                if (meta != null) {
-                                    meta.lastPublishedTimestamp = now
-                                    meta.lastPublishedRssi = discovered.rssi
-                                } else {
-                                    deviceMeta[deviceId] = DeviceMetadata(
-                                        lastPublishedTimestamp = now,
-                                        lastPublishedRssi = discovered.rssi,
-                                        hasMeaningfulName = devName?.isNotBlank() == true,
-                                    )
+                                // Deduplication: prevent repeated processing of the same device
+                                val shouldUpdate: Boolean
+                                synchronized(cacheLock) {
+                                    val meta = deviceMeta[deviceId]
+                                    shouldUpdate = (meta == null) || (now - meta.lastPublishedTimestamp >= HEARTBEAT_UPDATE_INTERVAL_MS)
                                 }
+                                if (!shouldUpdate) return
+
+                                val devName = device?.name ?: intent.getStringExtra(BluetoothDevice.EXTRA_NAME)
+                                val devRssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).toInt()
+                                val displayName = devName?.ifBlank { null } ?: "Bluetooth Device (${address.takeLast(5)})"
+
+                                val discovered =
+                                    DiscoveredDevice(
+                                        id = deviceId,
+                                        name = displayName,
+                                        transportType = TransportType.BLUETOOTH,
+                                        bluetoothAddress = address,
+                                        rssi = if (devRssi != Short.MIN_VALUE.toInt()) devRssi else -65,
+                                        isReadyToReceive = true,
+                                        lastSeenTimestamp = now,
+                                    )
+
+                                synchronized(cacheLock) {
+                                    deviceCache[deviceId] = discovered
+                                    addressToId[address] = deviceId
+                                    val meta = deviceMeta[deviceId]
+                                    if (meta != null) {
+                                        meta.lastPublishedTimestamp = now
+                                        meta.lastPublishedRssi = discovered.rssi
+                                    } else {
+                                        deviceMeta[deviceId] =
+                                            DeviceMetadata(
+                                                lastPublishedTimestamp = now,
+                                                lastPublishedRssi = discovered.rssi,
+                                                hasMeaningfulName = devName?.isNotBlank() == true,
+                                            )
+                                    }
+                                }
+                                publishDevices()
                             }
-                            publishDevices()
                         }
                     }
-                }
 
                 val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
                 context.registerReceiver(receiver, filter)

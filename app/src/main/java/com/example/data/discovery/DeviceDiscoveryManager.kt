@@ -13,8 +13,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-class DeviceDiscoveryManager(private val context: Context) {
-
+class DeviceDiscoveryManager(
+    private val context: Context,
+) {
     companion object {
         private const val TAG = "DeviceDiscoveryManager"
         const val PEER_EXPIRY_MS = 15_000L // Remove peers not heard from for 15s
@@ -45,90 +46,95 @@ class DeviceDiscoveryManager(private val context: Context) {
 
     private fun startPeriodicCleanup() {
         cleanupJob?.cancel()
-        cleanupJob = scope.launch {
-            while (true) {
-                kotlinx.coroutines.delay(4000)
-                val now = System.currentTimeMillis()
-                val current = _nearbyDevices.value
-                val (fresh, expired) = current.partition { (now - it.lastSeenTimestamp) < PEER_EXPIRY_MS }
-                if (expired.isNotEmpty()) {
-                    expired.forEach { dev ->
-                        Log.d(TAG, "[PEER_EXPIRED] deviceId=${dev.id} transport=${dev.transportType}")
+        cleanupJob =
+            scope.launch {
+                while (true) {
+                    kotlinx.coroutines.delay(4000)
+                    val now = System.currentTimeMillis()
+                    val current = _nearbyDevices.value
+                    val (fresh, expired) = current.partition { (now - it.lastSeenTimestamp) < PEER_EXPIRY_MS }
+                    if (expired.isNotEmpty()) {
+                        expired.forEach { dev ->
+                            Log.d(TAG, "[PEER_EXPIRED] deviceId=${dev.id} transport=${dev.transportType}")
+                        }
+                        _nearbyDevices.value = fresh
                     }
-                    _nearbyDevices.value = fresh
                 }
             }
-        }
     }
 
     private fun startCombining() {
-        combineJob = scope.launch {
-            combine(
-                lanDiscovery.discoveredDevices,
-                bleDiscovery.discoveredDevices,
-                wifiP2pManager.discoveredPeers
-            ) { lanMap, bleMap, p2pList ->
-                val now = System.currentTimeMillis()
-                val merged = mutableMapOf<String, DiscoveredDevice>()
+        combineJob =
+            scope.launch {
+                combine(
+                    lanDiscovery.discoveredDevices,
+                    bleDiscovery.discoveredDevices,
+                    wifiP2pManager.discoveredPeers,
+                ) { lanMap, bleMap, p2pList ->
+                    val now = System.currentTimeMillis()
+                    val merged = mutableMapOf<String, DiscoveredDevice>()
 
-                // Helper to update or insert peer with deduplication
-                fun processDevice(dev: DiscoveredDevice) {
-                    if (now - dev.lastSeenTimestamp >= PEER_EXPIRY_MS) return
+                    // Helper to update or insert peer with deduplication
+                    fun processDevice(dev: DiscoveredDevice) {
+                        if (now - dev.lastSeenTimestamp >= PEER_EXPIRY_MS) return
 
-                    // Check if an existing probed placeholder with the same IP should be superseded by a real device_id
-                    if (dev.ipAddress != null && !dev.id.startsWith("DROP-")) {
-                        val probedKey = merged.keys.find { key ->
-                            key.startsWith("DROP-") && merged[key]?.ipAddress == dev.ipAddress
+                        // Check if an existing probed placeholder with the same IP should be superseded by a real device_id
+                        if (dev.ipAddress != null && !dev.id.startsWith("DROP-")) {
+                            val probedKey =
+                                merged.keys.find { key ->
+                                    key.startsWith("DROP-") && merged[key]?.ipAddress == dev.ipAddress
+                                }
+                            if (probedKey != null) {
+                                merged.remove(probedKey)
+                            }
                         }
-                        if (probedKey != null) {
-                            merged.remove(probedKey)
+
+                        val existing = merged[dev.id]
+                        if (existing == null) {
+                            merged[dev.id] = dev
+                        } else {
+                            // Update existing peer with freshest session, endpoint, and transport capabilities
+                            val preferFasterTransport =
+                                when {
+                                    dev.transportType == TransportType.LOCAL_WIFI -> dev.transportType
+                                    existing.transportType == TransportType.LOCAL_WIFI -> existing.transportType
+                                    dev.transportType == TransportType.WIFI_DIRECT -> dev.transportType
+                                    else -> existing.transportType
+                                }
+                            val updated =
+                                existing.copy(
+                                    name = if (dev.name.isNotBlank() && !dev.name.startsWith("Nearby")) dev.name else existing.name,
+                                    ipAddress = dev.ipAddress ?: existing.ipAddress,
+                                    port = if (dev.port > 0) dev.port else existing.port,
+                                    bluetoothAddress = dev.bluetoothAddress ?: existing.bluetoothAddress,
+                                    transportType = preferFasterTransport,
+                                    lastSeenTimestamp = maxOf(existing.lastSeenTimestamp, dev.lastSeenTimestamp),
+                                    sessionId = dev.sessionId ?: existing.sessionId,
+                                    discoveryGeneration = maxOf(existing.discoveryGeneration, dev.discoveryGeneration),
+                                )
+                            merged[dev.id] = updated
+                            Log.d(TAG, "[PEER_UPDATED] deviceId=${dev.id} transport=${updated.transportType}")
                         }
                     }
 
-                    val existing = merged[dev.id]
-                    if (existing == null) {
-                        merged[dev.id] = dev
-                    } else {
-                        // Update existing peer with freshest session, endpoint, and transport capabilities
-                        val preferFasterTransport = when {
-                            dev.transportType == TransportType.LOCAL_WIFI -> dev.transportType
-                            existing.transportType == TransportType.LOCAL_WIFI -> existing.transportType
-                            dev.transportType == TransportType.WIFI_DIRECT -> dev.transportType
-                            else -> existing.transportType
-                        }
-                        val updated = existing.copy(
-                            name = if (dev.name.isNotBlank() && !dev.name.startsWith("Nearby")) dev.name else existing.name,
-                            ipAddress = dev.ipAddress ?: existing.ipAddress,
-                            port = if (dev.port > 0) dev.port else existing.port,
-                            bluetoothAddress = dev.bluetoothAddress ?: existing.bluetoothAddress,
-                            transportType = preferFasterTransport,
-                            lastSeenTimestamp = maxOf(existing.lastSeenTimestamp, dev.lastSeenTimestamp),
-                            sessionId = dev.sessionId ?: existing.sessionId,
-                            discoveryGeneration = maxOf(existing.discoveryGeneration, dev.discoveryGeneration)
-                        )
-                        merged[dev.id] = updated
-                        Log.d(TAG, "[PEER_UPDATED] deviceId=${dev.id} transport=${updated.transportType}")
-                    }
+                    // 1. LAN Wi-Fi devices (Highest priority for direct IP)
+                    lanMap.values.forEach { dev -> processDevice(dev) }
+
+                    // 2. Wi-Fi Direct devices
+                    p2pList.forEach { dev -> processDevice(dev) }
+
+                    // 3. BLE devices (Bluetooth fallback or discovery trigger)
+                    bleMap.values.forEach { dev -> processDevice(dev) }
+
+                    merged.values.toList().sortedWith(
+                        compareByDescending<DiscoveredDevice> { it.transportType == TransportType.LOCAL_WIFI }
+                            .thenByDescending { it.transportType == TransportType.WIFI_DIRECT }
+                            .thenByDescending { it.lastSeenTimestamp },
+                    )
+                }.collect { list ->
+                    _nearbyDevices.value = list
                 }
-
-                // 1. LAN Wi-Fi devices (Highest priority for direct IP)
-                lanMap.values.forEach { dev -> processDevice(dev) }
-
-                // 2. Wi-Fi Direct devices
-                p2pList.forEach { dev -> processDevice(dev) }
-
-                // 3. BLE devices (Bluetooth fallback or discovery trigger)
-                bleMap.values.forEach { dev -> processDevice(dev) }
-
-                merged.values.toList().sortedWith(
-                    compareByDescending<DiscoveredDevice> { it.transportType == TransportType.LOCAL_WIFI }
-                        .thenByDescending { it.transportType == TransportType.WIFI_DIRECT }
-                        .thenByDescending { it.lastSeenTimestamp }
-                )
-            }.collect { list ->
-                _nearbyDevices.value = list
             }
-        }
     }
 
     /**
@@ -159,7 +165,11 @@ class DeviceDiscoveryManager(private val context: Context) {
     /**
      * Start advertising as a receiver waiting for senders
      */
-    fun startAdvertising(localDeviceId: String, localDeviceName: String, tcpPort: Int) {
+    fun startAdvertising(
+        localDeviceId: String,
+        localDeviceName: String,
+        tcpPort: Int,
+    ) {
         stopAdvertising() // Ensure any prior advertisement is stopped first
         lanDiscovery.startAdvertising(localDeviceId, localDeviceName, tcpPort)
         bleDiscovery.startAdvertising(localDeviceId, localDeviceName)

@@ -23,18 +23,19 @@ import java.util.UUID
 data class WifiDiscoverySession(
     val generation: Long,
     val sessionId: String,
-    val startedAt: Long
+    val startedAt: Long,
 )
 
 enum class DiscoveryLifecycleState {
     STOPPED,
     STARTING,
     ACTIVE,
-    STOPPING
+    STOPPING,
 }
 
-class WifiP2pDirectManager(private val context: Context) {
-
+class WifiP2pDirectManager(
+    private val context: Context,
+) {
     companion object {
         private const val TAG = "WifiP2pDirectManager"
         const val DEFAULT_PORT = 8888
@@ -86,97 +87,113 @@ class WifiP2pDirectManager(private val context: Context) {
         initChannel()
         if (receiver != null) return
 
-        val intentFilter = IntentFilter().apply {
-            addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
-            addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
-            addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
-            addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
-        }
+        val intentFilter =
+            IntentFilter().apply {
+                addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
+                addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
+                addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
+                addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
+            }
 
-        receiver = object : BroadcastReceiver() {
-            @SuppressLint("MissingPermission")
-            override fun onReceive(context: Context, intent: Intent) {
-                when (intent.action) {
-                    WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION -> {
-                        val state = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1)
-                        _isWifiP2pEnabled.value = (state == WifiP2pManager.WIFI_P2P_STATE_ENABLED)
-                    }
-                    WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
-                        val activeGen: Long
-                        val activeSessionId: String
-                        synchronized(stateLock) {
-                            if (lifecycleState != DiscoveryLifecycleState.ACTIVE && lifecycleState != DiscoveryLifecycleState.STARTING) {
-                                Log.d(TAG, "[DISCOVERY_CALLBACK_IGNORED] reason=not_active state=$lifecycleState")
-                                return
-                            }
-                            activeGen = discoveryGeneration
-                            activeSessionId = currentSession?.sessionId ?: ""
+        receiver =
+            object : BroadcastReceiver() {
+                @SuppressLint("MissingPermission")
+                override fun onReceive(
+                    context: Context,
+                    intent: Intent,
+                ) {
+                    when (intent.action) {
+                        WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION -> {
+                            val state = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1)
+                            _isWifiP2pEnabled.value = (state == WifiP2pManager.WIFI_P2P_STATE_ENABLED)
                         }
 
-                        try {
-                            wifiP2pManager?.requestPeers(channel) { peerList: WifiP2pDeviceList ->
-                                synchronized(stateLock) {
-                                    if (activeGen != discoveryGeneration || currentSession?.sessionId != activeSessionId) {
-                                        Log.d(
-                                            TAG,
-                                            "[DISCOVERY_CALLBACK_IGNORED] reason=stale_generation callbackGen=$activeGen currentGen=$discoveryGeneration"
-                                        )
-                                        return@requestPeers
-                                    }
-
-                                    val now = System.currentTimeMillis()
-                                    val devices = peerList.deviceList.map { device ->
-                                        DiscoveredDevice(
-                                            id = "P2P-" + device.deviceAddress.replace(":", "").takeLast(4),
-                                            name = device.deviceName.ifBlank { "Nearby Wi-Fi Direct" },
-                                            transportType = TransportType.WIFI_DIRECT,
-                                            bluetoothAddress = device.deviceAddress,
-                                            isReadyToReceive = true,
-                                            lastSeenTimestamp = now,
-                                            sessionId = activeSessionId,
-                                            discoveryGeneration = activeGen
-                                        )
-                                    }
-                                    _discoveredPeers.value = devices
-                                    Log.d(TAG, "[PEER_LIST_UPDATED] generation=$activeGen peerCount=${devices.size}")
+                        WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
+                            val activeGen: Long
+                            val activeSessionId: String
+                            synchronized(stateLock) {
+                                if (lifecycleState != DiscoveryLifecycleState.ACTIVE &&
+                                    lifecycleState != DiscoveryLifecycleState.STARTING
+                                ) {
+                                    Log.d(TAG, "[DISCOVERY_CALLBACK_IGNORED] reason=not_active state=$lifecycleState")
+                                    return
                                 }
+                                activeGen = discoveryGeneration
+                                activeSessionId = currentSession?.sessionId ?: ""
                             }
-                        } catch (e: SecurityException) {
-                            Log.w(TAG, "Missing permission in requestPeers", e)
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Exception in requestPeers", e)
-                        }
-                    }
-                    WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
-                        val activeGen: Long
-                        synchronized(stateLock) {
-                            activeGen = discoveryGeneration
-                        }
-                        val networkInfo = intent.getParcelableExtra<NetworkInfo>(WifiP2pManager.EXTRA_NETWORK_INFO)
-                        if (networkInfo?.isConnected == true) {
+
                             try {
-                                wifiP2pManager?.requestConnectionInfo(channel) { info ->
+                                wifiP2pManager?.requestPeers(channel) { peerList: WifiP2pDeviceList ->
                                     synchronized(stateLock) {
-                                        if (activeGen != discoveryGeneration) {
-                                            Log.d(TAG, "[DISCOVERY_CALLBACK_IGNORED] reason=stale_generation connection callback ignored")
-                                            return@requestConnectionInfo
+                                        if (activeGen != discoveryGeneration || currentSession?.sessionId != activeSessionId) {
+                                            Log.d(
+                                                TAG,
+                                                "[DISCOVERY_CALLBACK_IGNORED] reason=stale_generation callbackGen=$activeGen currentGen=$discoveryGeneration",
+                                            )
+                                            return@requestPeers
                                         }
-                                        Log.d(TAG, "Wi-Fi Direct connected! Group owner: ${info?.groupOwnerAddress?.hostAddress}, isOwner: ${info?.isGroupOwner}")
-                                        _connectionInfo.value = info
+
+                                        val now = System.currentTimeMillis()
+                                        val devices =
+                                            peerList.deviceList.map { device ->
+                                                DiscoveredDevice(
+                                                    id = "P2P-" + device.deviceAddress.replace(":", "").takeLast(4),
+                                                    name = device.deviceName.ifBlank { "Nearby Wi-Fi Direct" },
+                                                    transportType = TransportType.WIFI_DIRECT,
+                                                    bluetoothAddress = device.deviceAddress,
+                                                    isReadyToReceive = true,
+                                                    lastSeenTimestamp = now,
+                                                    sessionId = activeSessionId,
+                                                    discoveryGeneration = activeGen,
+                                                )
+                                            }
+                                        _discoveredPeers.value = devices
+                                        Log.d(TAG, "[PEER_LIST_UPDATED] generation=$activeGen peerCount=${devices.size}")
                                     }
                                 }
                             } catch (e: SecurityException) {
-                                Log.w(TAG, "Missing permission in requestConnectionInfo", e)
+                                Log.w(TAG, "Missing permission in requestPeers", e)
                             } catch (e: Exception) {
-                                Log.w(TAG, "Exception in requestConnectionInfo", e)
+                                Log.w(TAG, "Exception in requestPeers", e)
                             }
-                        } else {
-                            _connectionInfo.value = null
+                        }
+
+                        WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
+                            val activeGen: Long
+                            synchronized(stateLock) {
+                                activeGen = discoveryGeneration
+                            }
+                            val networkInfo = intent.getParcelableExtra<NetworkInfo>(WifiP2pManager.EXTRA_NETWORK_INFO)
+                            if (networkInfo?.isConnected == true) {
+                                try {
+                                    wifiP2pManager?.requestConnectionInfo(channel) { info ->
+                                        synchronized(stateLock) {
+                                            if (activeGen != discoveryGeneration) {
+                                                Log.d(
+                                                    TAG,
+                                                    "[DISCOVERY_CALLBACK_IGNORED] reason=stale_generation connection callback ignored",
+                                                )
+                                                return@requestConnectionInfo
+                                            }
+                                            Log.d(
+                                                TAG,
+                                                "Wi-Fi Direct connected! Group owner: ${info?.groupOwnerAddress?.hostAddress}, isOwner: ${info?.isGroupOwner}",
+                                            )
+                                            _connectionInfo.value = info
+                                        }
+                                    }
+                                } catch (e: SecurityException) {
+                                    Log.w(TAG, "Missing permission in requestConnectionInfo", e)
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Exception in requestConnectionInfo", e)
+                                }
+                            } else {
+                                _connectionInfo.value = null
+                            }
                         }
                     }
                 }
             }
-        }
 
         try {
             context.registerReceiver(receiver, intentFilter)
@@ -195,11 +212,12 @@ class WifiP2pDirectManager(private val context: Context) {
             lifecycleState = DiscoveryLifecycleState.STARTING
             val gen = targetGeneration ?: (++discoveryGeneration)
             discoveryGeneration = gen
-            val session = WifiDiscoverySession(
-                generation = gen,
-                sessionId = UUID.randomUUID().toString(),
-                startedAt = System.currentTimeMillis()
-            )
+            val session =
+                WifiDiscoverySession(
+                    generation = gen,
+                    sessionId = UUID.randomUUID().toString(),
+                    startedAt = System.currentTimeMillis(),
+                )
             currentSession = session
             _discoveredPeers.value = emptyList() // clear transient peers immediately on new session
             Log.d(TAG, "[DISCOVERY_START] generation=$gen sessionId=${session.sessionId} transport=WIFI_DIRECT")
@@ -214,27 +232,33 @@ class WifiP2pDirectManager(private val context: Context) {
             }
 
             try {
-                mgr.discoverPeers(ch, object : WifiP2pManager.ActionListener {
-                    override fun onSuccess() {
-                        synchronized(stateLock) {
-                            if (discoveryGeneration == gen) {
-                                lifecycleState = DiscoveryLifecycleState.ACTIVE
-                                Log.d(TAG, "[DISCOVERY_ACTIVE] generation=$gen Wi-Fi Direct peer discovery initiated")
-                            } else {
-                                Log.d(TAG, "[DISCOVERY_CALLBACK_IGNORED] reason=stale_generation callbackGen=$gen currentGen=$discoveryGeneration")
+                mgr.discoverPeers(
+                    ch,
+                    object : WifiP2pManager.ActionListener {
+                        override fun onSuccess() {
+                            synchronized(stateLock) {
+                                if (discoveryGeneration == gen) {
+                                    lifecycleState = DiscoveryLifecycleState.ACTIVE
+                                    Log.d(TAG, "[DISCOVERY_ACTIVE] generation=$gen Wi-Fi Direct peer discovery initiated")
+                                } else {
+                                    Log.d(
+                                        TAG,
+                                        "[DISCOVERY_CALLBACK_IGNORED] reason=stale_generation callbackGen=$gen currentGen=$discoveryGeneration",
+                                    )
+                                }
                             }
                         }
-                    }
 
-                    override fun onFailure(reasonCode: Int) {
-                        synchronized(stateLock) {
-                            if (discoveryGeneration == gen) {
-                                lifecycleState = DiscoveryLifecycleState.STOPPED
-                                Log.w(TAG, "[DISCOVERY_FAILED] generation=$gen reasonCode=$reasonCode")
+                        override fun onFailure(reasonCode: Int) {
+                            synchronized(stateLock) {
+                                if (discoveryGeneration == gen) {
+                                    lifecycleState = DiscoveryLifecycleState.STOPPED
+                                    Log.w(TAG, "[DISCOVERY_FAILED] generation=$gen reasonCode=$reasonCode")
+                                }
                             }
                         }
-                    }
-                })
+                    },
+                )
             } catch (e: SecurityException) {
                 Log.e(TAG, "[DISCOVERY_PERMISSION_DENIED] Missing permissions for Wi-Fi Direct discovery", e)
                 lifecycleState = DiscoveryLifecycleState.STOPPED
@@ -262,14 +286,18 @@ class WifiP2pDirectManager(private val context: Context) {
         val ch = channel
         if (mgr != null && ch != null) {
             try {
-                mgr.stopPeerDiscovery(ch, object : WifiP2pManager.ActionListener {
-                    override fun onSuccess() {
-                        Log.d(TAG, "Wi-Fi Direct peer discovery stopped successfully")
-                    }
-                    override fun onFailure(reasonCode: Int) {
-                        Log.w(TAG, "Wi-Fi Direct stopPeerDiscovery failed: $reasonCode")
-                    }
-                })
+                mgr.stopPeerDiscovery(
+                    ch,
+                    object : WifiP2pManager.ActionListener {
+                        override fun onSuccess() {
+                            Log.d(TAG, "Wi-Fi Direct peer discovery stopped successfully")
+                        }
+
+                        override fun onFailure(reasonCode: Int) {
+                            Log.w(TAG, "Wi-Fi Direct stopPeerDiscovery failed: $reasonCode")
+                        }
+                    },
+                )
             } catch (e: SecurityException) {
                 Log.w(TAG, "SecurityException stopping peer discovery", e)
             } catch (e: Exception) {
@@ -287,25 +315,35 @@ class WifiP2pDirectManager(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    fun connect(deviceAddress: String, onSuccess: () -> Unit, onFailure: (Int) -> Unit) {
+    fun connect(
+        deviceAddress: String,
+        onSuccess: () -> Unit,
+        onFailure: (Int) -> Unit,
+    ) {
         val mgr = wifiP2pManager ?: return
         val ch = channel ?: return
 
-        val config = WifiP2pConfig().apply {
-            this.deviceAddress = deviceAddress
-        }
+        val config =
+            WifiP2pConfig().apply {
+                this.deviceAddress = deviceAddress
+            }
 
         try {
-            mgr.connect(ch, config, object : WifiP2pManager.ActionListener {
-                override fun onSuccess() {
-                    Log.d(TAG, "Wi-Fi P2P connection request sent")
-                    onSuccess()
-                }
-                override fun onFailure(reasonCode: Int) {
-                    Log.e(TAG, "Wi-Fi P2P connection failed: $reasonCode")
-                    onFailure(reasonCode)
-                }
-            })
+            mgr.connect(
+                ch,
+                config,
+                object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() {
+                        Log.d(TAG, "Wi-Fi P2P connection request sent")
+                        onSuccess()
+                    }
+
+                    override fun onFailure(reasonCode: Int) {
+                        Log.e(TAG, "Wi-Fi P2P connection failed: $reasonCode")
+                        onFailure(reasonCode)
+                    }
+                },
+            )
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException connecting to Wi-Fi P2P peer", e)
             onFailure(-1)
@@ -316,24 +354,31 @@ class WifiP2pDirectManager(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    fun createGroup(onSuccess: () -> Unit, onFailure: (Int) -> Unit) {
+    fun createGroup(
+        onSuccess: () -> Unit,
+        onFailure: (Int) -> Unit,
+    ) {
         val mgr = wifiP2pManager ?: return
         val ch = channel ?: return
 
         try {
-            mgr.createGroup(ch, object : WifiP2pManager.ActionListener {
-                override fun onSuccess() {
-                    synchronized(stateLock) {
-                        isGroupCreatedByApp = true
+            mgr.createGroup(
+                ch,
+                object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() {
+                        synchronized(stateLock) {
+                            isGroupCreatedByApp = true
+                        }
+                        Log.d(TAG, "[WIFI_GROUP_CREATED] Wi-Fi Direct group created by DropSend")
+                        onSuccess()
                     }
-                    Log.d(TAG, "[WIFI_GROUP_CREATED] Wi-Fi Direct group created by DropSend")
-                    onSuccess()
-                }
-                override fun onFailure(reasonCode: Int) {
-                    Log.w(TAG, "Wi-Fi Direct group creation failed: $reasonCode")
-                    onFailure(reasonCode)
-                }
-            })
+
+                    override fun onFailure(reasonCode: Int) {
+                        Log.w(TAG, "Wi-Fi Direct group creation failed: $reasonCode")
+                        onFailure(reasonCode)
+                    }
+                },
+            )
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException creating group", e)
             onFailure(-1)
@@ -356,17 +401,21 @@ class WifiP2pDirectManager(private val context: Context) {
         val ch = channel ?: return
 
         try {
-            mgr.removeGroup(ch, object : WifiP2pManager.ActionListener {
-                override fun onSuccess() {
-                    synchronized(stateLock) {
-                        isGroupCreatedByApp = false
+            mgr.removeGroup(
+                ch,
+                object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() {
+                        synchronized(stateLock) {
+                            isGroupCreatedByApp = false
+                        }
+                        Log.d(TAG, "[WIFI_GROUP_REMOVED] Wi-Fi Direct group removed")
                     }
-                    Log.d(TAG, "[WIFI_GROUP_REMOVED] Wi-Fi Direct group removed")
-                }
-                override fun onFailure(reason: Int) {
-                    Log.w(TAG, "Wi-Fi Direct group remove failed: $reason")
-                }
-            })
+
+                    override fun onFailure(reason: Int) {
+                        Log.w(TAG, "Wi-Fi Direct group remove failed: $reason")
+                    }
+                },
+            )
         } catch (e: SecurityException) {
             Log.w(TAG, "SecurityException removing group", e)
         } catch (e: Exception) {
@@ -393,12 +442,17 @@ class WifiP2pDirectManager(private val context: Context) {
      * Testing/verification hook: simulate peer delivery for a specific generation.
      * Returns true if accepted, false if discarded due to stale generation or inactive state.
      */
-    fun injectPeersForTesting(generation: Long, peers: List<DiscoveredDevice>): Boolean {
+    fun injectPeersForTesting(
+        generation: Long,
+        peers: List<DiscoveredDevice>,
+    ): Boolean {
         synchronized(stateLock) {
-            if (generation != discoveryGeneration || (lifecycleState != DiscoveryLifecycleState.ACTIVE && lifecycleState != DiscoveryLifecycleState.STARTING)) {
+            if (generation != discoveryGeneration ||
+                (lifecycleState != DiscoveryLifecycleState.ACTIVE && lifecycleState != DiscoveryLifecycleState.STARTING)
+            ) {
                 Log.d(
                     TAG,
-                    "[DISCOVERY_CALLBACK_IGNORED] reason=stale_generation callbackGen=$generation currentGen=$discoveryGeneration"
+                    "[DISCOVERY_CALLBACK_IGNORED] reason=stale_generation callbackGen=$generation currentGen=$discoveryGeneration",
                 )
                 return false
             }
