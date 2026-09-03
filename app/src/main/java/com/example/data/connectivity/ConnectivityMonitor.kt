@@ -157,7 +157,7 @@ class ConnectivityMonitor(
 
         // 2. Default Network Callback (Fires whenever primary network changes)
         try {
-            defaultNetworkCallback =
+            val callback =
                 object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
                         cachedIpAddress = null
@@ -177,8 +177,9 @@ class ConnectivityMonitor(
                         updateState()
                     }
                 }
+            defaultNetworkCallback = callback
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                connectivityManager?.registerDefaultNetworkCallback(defaultNetworkCallback!!)
+                connectivityManager?.registerDefaultNetworkCallback(callback)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Default network callback registration error: ${e.message}")
@@ -191,7 +192,7 @@ class ConnectivityMonitor(
                     .Builder()
                     .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
                     .build()
-            defaultNetworkCallback =
+            val callback =
                 object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
                         cachedIpAddress = null
@@ -211,7 +212,8 @@ class ConnectivityMonitor(
                         updateState()
                     }
                 }
-            connectivityManager?.registerNetworkCallback(wifiRequest, wifiNetworkCallback!!)
+            wifiNetworkCallback = callback
+            connectivityManager?.registerNetworkCallback(wifiRequest, callback)
         } catch (e: Exception) {
             Log.w(TAG, "Wi-Fi network callback registration error: ${e.message}")
         }
