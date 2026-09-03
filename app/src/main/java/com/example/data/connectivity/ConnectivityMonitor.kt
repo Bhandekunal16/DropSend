@@ -28,11 +28,12 @@ import java.net.NetworkInterface
 data class ConnectivityState(
     val isBluetoothOn: Boolean = false,
     val isWifiOn: Boolean = false,
-    val localIpAddress: String? = null
+    val localIpAddress: String? = null,
 )
 
-class ConnectivityMonitor(private val context: Context) {
-
+class ConnectivityMonitor(
+    private val context: Context,
+) {
     companion object {
         private const val TAG = "ConnectivityMonitor"
     }
@@ -50,18 +51,27 @@ class ConnectivityMonitor(private val context: Context) {
     private var pollingJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    private var cachedIpAddress: String? = null
+
     private fun computeCurrentState(): ConnectivityState {
-        val isBt = isBluetoothEnabled()
-        val isWifi = isWifiEnabled()
-        val ip = getLocalIpAddress()
-        return ConnectivityState(isBluetoothOn = isBt, isWifiOn = isWifi, localIpAddress = ip)
+        val bluetoothOn = isBluetoothEnabled()
+        val wifiOn = isWifiEnabled()
+
+        if (!wifiOn) {
+            cachedIpAddress = null
+        } else if (cachedIpAddress == null) {
+            cachedIpAddress = getLocalIpAddress()
+        }
+
+        return ConnectivityState(
+            isBluetoothOn = bluetoothOn,
+            isWifiOn = wifiOn,
+            localIpAddress = cachedIpAddress,
+        )
     }
 
-    /**
-     * Checks whether Bluetooth adapter is currently powered on and enabled.
-     */
-    fun isBluetoothEnabled(): Boolean {
-        return try {
+    fun isBluetoothEnabled(): Boolean =
+        try {
             val adapter = bluetoothManager?.adapter ?: BluetoothAdapter.getDefaultAdapter()
             adapter?.isEnabled == true
         } catch (_: SecurityException) {
@@ -73,36 +83,37 @@ class ConnectivityMonitor(private val context: Context) {
         } catch (_: Exception) {
             false
         }
-    }
 
     /**
      * Checks whether Wi-Fi radio is enabled or connected to a Wi-Fi/Ethernet/P2P/Hotspot network.
      */
     fun isWifiEnabled(): Boolean {
         // 1. WifiManager radio switch check
-        val isWmEnabled = try {
-            wifiManager?.isWifiEnabled == true ||
-                wifiManager?.wifiState == WifiManager.WIFI_STATE_ENABLED
-        } catch (_: Exception) {
-            false
-        }
+        val isWmEnabled =
+            try {
+                wifiManager?.isWifiEnabled == true ||
+                    wifiManager?.wifiState == WifiManager.WIFI_STATE_ENABLED
+            } catch (_: Exception) {
+                false
+            }
 
         if (isWmEnabled) return true
 
         // 2. ConnectivityManager active network check (Wi-Fi or Ethernet/Hotspot)
-        val isNetworkConnected = try {
-            val cm = connectivityManager
-            val active = cm?.activeNetwork
-            if (active != null) {
-                val caps = cm.getNetworkCapabilities(active)
-                caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true ||
-                    caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true
-            } else {
+        val isNetworkConnected =
+            try {
+                val cm = connectivityManager
+                val active = cm?.activeNetwork
+                if (active != null) {
+                    val caps = cm.getNetworkCapabilities(active)
+                    caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true ||
+                        caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true
+                } else {
+                    false
+                }
+            } catch (_: Exception) {
                 false
             }
-        } catch (_: Exception) {
-            false
-        }
 
         if (isNetworkConnected) return true
 
@@ -113,7 +124,12 @@ class ConnectivityMonitor(private val context: Context) {
             while (interfaces.hasMoreElements()) {
                 val iface = interfaces.nextElement()
                 val name = iface.name.lowercase()
-                if (iface.isUp && !iface.isLoopback && (name.startsWith("wlan") || name.startsWith("p2p") || name.startsWith("ap") || name.startsWith("eth") || name.startsWith("rndis"))) {
+                if (iface.isUp && !iface.isLoopback &&
+                    (
+                        name.startsWith("wlan") || name.startsWith("p2p") || name.startsWith("ap") || name.startsWith("eth") ||
+                            name.startsWith("rndis")
+                    )
+                ) {
                     val addrs = iface.inetAddresses
                     while (addrs.hasMoreElements()) {
                         val addr = addrs.nextElement()
@@ -135,24 +151,29 @@ class ConnectivityMonitor(private val context: Context) {
         updateState()
 
         // 1. Broadcast Receiver for all radio and connectivity state changes
-        btAndWifiReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                updateState()
+        btAndWifiReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    context: Context?,
+                    intent: Intent?,
+                ) {
+                    updateState()
+                }
             }
-        }
 
-        val filter = IntentFilter().apply {
-            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
-            addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
-            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
-            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
-            addAction(WifiManager.SUPPLICANT_STATE_CHANGED_ACTION)
-            @Suppress("DEPRECATION")
-            addAction(ConnectivityManager.CONNECTIVITY_ACTION)
-            addAction("android.net.wifi.WIFI_AP_STATE_CHANGED")
-            addAction("android.net.wifi.p2p.STATE_CHANGED")
-            addAction("android.net.wifi.p2p.CONNECTION_STATE_CHANGE")
-        }
+        val filter =
+            IntentFilter().apply {
+                addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+                addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+                addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+                addAction(WifiManager.SUPPLICANT_STATE_CHANGED_ACTION)
+                @Suppress("DEPRECATION")
+                addAction(ConnectivityManager.CONNECTIVITY_ACTION)
+                addAction("android.net.wifi.WIFI_AP_STATE_CHANGED")
+                addAction("android.net.wifi.p2p.STATE_CHANGED")
+                addAction("android.net.wifi.p2p.CONNECTION_STATE_CHANGE")
+            }
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -170,11 +191,23 @@ class ConnectivityMonitor(private val context: Context) {
 
         // 2. Default Network Callback (Fires whenever primary network changes)
         try {
-            defaultNetworkCallback = object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) { updateState() }
-                override fun onLost(network: Network) { updateState() }
-                override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) { updateState() }
-            }
+            defaultNetworkCallback =
+                object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: Network) {
+                        updateState()
+                    }
+
+                    override fun onLost(network: Network) {
+                        updateState()
+                    }
+
+                    override fun onCapabilitiesChanged(
+                        network: Network,
+                        capabilities: NetworkCapabilities,
+                    ) {
+                        updateState()
+                    }
+                }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 connectivityManager?.registerDefaultNetworkCallback(defaultNetworkCallback!!)
             }
@@ -184,14 +217,28 @@ class ConnectivityMonitor(private val context: Context) {
 
         // 3. Specific Wi-Fi Network Callback
         try {
-            val wifiRequest = NetworkRequest.Builder()
-                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                .build()
-            wifiNetworkCallback = object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) { updateState() }
-                override fun onLost(network: Network) { updateState() }
-                override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) { updateState() }
-            }
+            val wifiRequest =
+                NetworkRequest
+                    .Builder()
+                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                    .build()
+            wifiNetworkCallback =
+                object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: Network) {
+                        updateState()
+                    }
+
+                    override fun onLost(network: Network) {
+                        updateState()
+                    }
+
+                    override fun onCapabilitiesChanged(
+                        network: Network,
+                        capabilities: NetworkCapabilities,
+                    ) {
+                        updateState()
+                    }
+                }
             connectivityManager?.registerNetworkCallback(wifiRequest, wifiNetworkCallback!!)
         } catch (e: Exception) {
             Log.w(TAG, "Wi-Fi network callback registration error: ${e.message}")
@@ -199,12 +246,13 @@ class ConnectivityMonitor(private val context: Context) {
 
         // 4. Periodic Coroutine Heartbeat (Guarantees sub-second real-time responsiveness in all runtimes)
         pollingJob?.cancel()
-        pollingJob = scope.launch {
-            while (isActive) {
-                delay(1000)
-                updateState()
+        pollingJob =
+            scope.launch {
+                while (isActive) {
+                    delay(1000)
+                    updateState()
+                }
             }
-        }
     }
 
     fun updateState() {
@@ -224,10 +272,12 @@ class ConnectivityMonitor(private val context: Context) {
             val active = cm?.activeNetwork
             if (active != null) {
                 val linkProps = cm.getLinkProperties(active)
-                val ip = linkProps?.linkAddresses
-                    ?.map { it.address }
-                    ?.firstOrNull { it is Inet4Address && !it.isLoopbackAddress }
-                    ?.hostAddress
+                val ip =
+                    linkProps
+                        ?.linkAddresses
+                        ?.map { it.address }
+                        ?.firstOrNull { it is Inet4Address && !it.isLoopbackAddress }
+                        ?.hostAddress
                 if (!ip.isNullOrBlank() && ip != "0.0.0.0") {
                     return ip
                 }
@@ -235,16 +285,17 @@ class ConnectivityMonitor(private val context: Context) {
 
             // 2. Scan network interfaces prioritizing wlan, ap, p2p, and eth
             val interfaces = NetworkInterface.getNetworkInterfaces()?.toList() ?: emptyList()
-            val sortedIfaces = interfaces.sortedByDescending { iface ->
-                val n = iface.name.lowercase()
-                when {
-                    n.startsWith("wlan") -> 4
-                    n.startsWith("ap") -> 3
-                    n.startsWith("p2p") -> 2
-                    n.startsWith("eth") -> 1
-                    else -> 0
+            val sortedIfaces =
+                interfaces.sortedByDescending { iface ->
+                    val n = iface.name.lowercase()
+                    when {
+                        n.startsWith("wlan") -> 4
+                        n.startsWith("ap") -> 3
+                        n.startsWith("p2p") -> 2
+                        n.startsWith("eth") -> 1
+                        else -> 0
+                    }
                 }
-            }
 
             for (iface in sortedIfaces) {
                 if (!iface.isUp || iface.isLoopback) continue
@@ -259,7 +310,8 @@ class ConnectivityMonitor(private val context: Context) {
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
         return null
     }
 
@@ -269,18 +321,20 @@ class ConnectivityMonitor(private val context: Context) {
 
         try {
             btAndWifiReceiver?.let { context.unregisterReceiver(it) }
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
         btAndWifiReceiver = null
 
         try {
             defaultNetworkCallback?.let { connectivityManager?.unregisterNetworkCallback(it) }
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
         defaultNetworkCallback = null
 
         try {
             wifiNetworkCallback?.let { connectivityManager?.unregisterNetworkCallback(it) }
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
         wifiNetworkCallback = null
     }
 }
-
