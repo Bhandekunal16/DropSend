@@ -1,4 +1,4 @@
-```kotlin
+
 package com.example.data.db
 
 import androidx.room.Dao
@@ -125,4 +125,4 @@ interface TransferHistoryDao {
         const val DEFAULT_LIMIT = 100
     }
 }
-```
+
