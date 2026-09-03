@@ -72,14 +72,9 @@ class ConnectivityMonitor(
 
     fun isBluetoothEnabled(): Boolean =
         try {
-            val adapter = bluetoothManager?.adapter ?: BluetoothAdapter.getDefaultAdapter()
-            adapter?.isEnabled == true
+            bluetoothManager?.adapter?.isEnabled == true
         } catch (_: SecurityException) {
-            try {
-                BluetoothAdapter.getDefaultAdapter()?.isEnabled == true
-            } catch (_: Exception) {
-                false
-            }
+            false
         } catch (_: Exception) {
             false
         }
