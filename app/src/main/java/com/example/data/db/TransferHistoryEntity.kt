@@ -14,10 +14,8 @@ import androidx.room.PrimaryKey
     ],
 )
 data class TransferHistoryEntity(
-
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0L,
-
     val sessionId: String,
     val fileName: String,
     val mimeType: String,
@@ -31,6 +29,5 @@ data class TransferHistoryEntity(
     val averageSpeedBps: Long,
     val fileUriString: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
 )
-

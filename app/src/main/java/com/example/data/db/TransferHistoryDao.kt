@@ -1,4 +1,4 @@
-
+```kotlin
 package com.example.data.db
 
 import androidx.room.Dao
@@ -9,26 +9,24 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TransferHistoryDao {
+
     /**
-     * Inserts one transfer history record.
-     *
-     * Use only when a transfer reaches a terminal state:
-     * COMPLETED, FAILED, or CANCELLED.
+     * Inserts a single completed/failed/cancelled transfer.
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: TransferHistoryEntity): Long
 
     /**
-     * Efficient batch insertion.
+     * Inserts multiple transfer records efficiently.
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(entities: List<TransferHistoryEntity>)
 
     /**
-     * Observe recent transfer history.
+     * Observes the newest transfer records.
      *
-     * LIMIT prevents large lists from being loaded into memory
-     * and limits the amount of work caused by Flow emissions.
+     * Bounded result prevents unnecessary memory allocation
+     * and large UI updates.
      */
     @Query(
         """
@@ -38,18 +36,14 @@ interface TransferHistoryDao {
         LIMIT :limit
         """,
     )
-    fun getRecentHistory(limit: Int = DEFAULT_LIMIT): Flow<List<TransferHistoryEntity>>
+    fun getRecentHistory(
+        limit: Int = DEFAULT_LIMIT,
+    ): Flow<List<TransferHistoryEntity>>
 
     /**
-     * Backward-compatible unbounded query.
-     */
-    @Query("SELECT * FROM transfer_history ORDER BY timestamp DESC")
-    fun getAllHistory(): Flow<List<TransferHistoryEntity>>
-
-    /**
-     * Observe recent transfers with a specific status.
+     * Observes newest transfers for a specific status.
      *
-     * Optimized by the (status, timestamp) index.
+     * Uses the (status, timestamp) index.
      */
     @Query(
         """
@@ -66,27 +60,32 @@ interface TransferHistoryDao {
     ): Flow<List<TransferHistoryEntity>>
 
     /**
-     * Delete one history entry.
+     * Deletes one history record.
      */
-    @Query("DELETE FROM transfer_history WHERE id = :id")
+    @Query(
+        """
+        DELETE FROM transfer_history
+        WHERE id = :id
+        """,
+    )
     suspend fun deleteById(id: Long)
 
     /**
-     * Delete all history.
+     * Deletes all transfer history.
      */
     @Query("DELETE FROM transfer_history")
     suspend fun clearAll()
 
     /**
-     * Number of stored transfer records.
+     * Returns the number of stored records.
      */
     @Query("SELECT COUNT(*) FROM transfer_history")
     suspend fun getCount(): Int
 
     /**
-     * Keep only the newest records.
+     * Keeps only the newest [keepCount] records.
      *
-     * Useful for preventing unlimited database growth.
+     * The caller should pass a positive value.
      */
     @Query(
         """
@@ -102,6 +101,7 @@ interface TransferHistoryDao {
     suspend fun trimToLatest(keepCount: Int)
 
     companion object {
-        private const val DEFAULT_LIMIT = 100
+        const val DEFAULT_LIMIT = 100
     }
 }
+```
