@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TransferHistoryDao {
-
     /**
      * Inserts a single completed/failed/cancelled transfer.
      *
@@ -37,9 +36,7 @@ interface TransferHistoryDao {
         LIMIT :limit
         """,
     )
-    fun getRecentHistory(
-        limit: Int = DEFAULT_LIMIT,
-    ): Flow<List<TransferHistoryEntity>>
+    fun getRecentHistory(limit: Int = DEFAULT_LIMIT): Flow<List<TransferHistoryEntity>>
 
     /**
      * Legacy unbounded history query.
@@ -117,12 +114,9 @@ interface TransferHistoryDao {
         )
         """,
     )
-    suspend fun trimToLatest(
-        keepCount: Int,
-    )
+    suspend fun trimToLatest(keepCount: Int)
 
     companion object {
         const val DEFAULT_LIMIT = 100
     }
 }
-
