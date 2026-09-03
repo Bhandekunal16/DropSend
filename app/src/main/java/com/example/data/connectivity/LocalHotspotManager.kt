@@ -301,7 +301,7 @@ class LocalHotspotManager(
      * Wi-Fi / SoftAP / P2P.
      */
     private fun findHotspotIpAddress(): String? {
-        return try {
+        try {
             val interfaces =
                 NetworkInterface.getNetworkInterfaces()
                     ?: return null
