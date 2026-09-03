@@ -65,6 +65,9 @@ class ConnectivityMonitor(
     private var cachedP2pOrHotspotActive = false
 
     @Volatile
+    private var cachedP2pOrHotspotInterfaceState: Boolean? = null
+
+    @Volatile
     private var currentNetwork: Network? = null
 
     @Volatile
@@ -74,6 +77,8 @@ class ConnectivityMonitor(
     private var cachedIpAddress: String? = null
 
     private val updateGeneration = AtomicLong(0)
+    private val isFallbackRunning = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val pendingFallbackUpdate = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private var btAndWifiReceiver: BroadcastReceiver? = null
     private var defaultNetworkCallback: ConnectivityManager.NetworkCallback? = null
@@ -140,27 +145,23 @@ class ConnectivityMonitor(
      * Evaluates cached states first (O(1)), then WifiManager radio state, then active network capabilities,
      * falling back to checking for active local interfaces (P2P/Hotspot) only when necessary.
      */
-    fun isWifiEnabled(): Boolean {
-        val cached = cachedWifiOn
-        if (cached != null && isMonitoring) {
-            return cached || cachedP2pOrHotspotActive
-        }
-        if (isWifiEnabledFast()) {
-            return true
-        }
-        return hasActiveHotspotOrP2pInterface()
-    }
+    fun isWifiEnabled(): Boolean = checkWifiEnabled(allowInterfaceScan = true)
 
     /**
      * Fast-path Wi-Fi check without enumerating network interfaces.
      * Evaluates cached state, WifiManager radio switch, and ConnectivityManager transport capabilities.
      */
-    private fun isWifiEnabledFast(): Boolean {
+    private fun isWifiEnabledFast(): Boolean = checkWifiEnabled(allowInterfaceScan = false)
+
+    private fun checkWifiEnabled(allowInterfaceScan: Boolean): Boolean {
         val cached = cachedWifiOn
         if (cached != null && isMonitoring) {
-            return cached
+            return if (allowInterfaceScan) (cached || cachedP2pOrHotspotActive || (cachedP2pOrHotspotInterfaceState == true)) else cached
         }
-        return queryWifiRadioOrNetworkActive()
+        if (queryWifiRadioOrNetworkActive()) {
+            return true
+        }
+        return if (allowInterfaceScan) hasActiveHotspotOrP2pInterface() else false
     }
 
     private fun queryWifiRadioOrNetworkActive(): Boolean {
@@ -197,8 +198,21 @@ class ConnectivityMonitor(
     /**
      * Checks whether any local P2P or AP interface is up and has a valid IPv4 address.
      * Only executed as a fallback when cheap radio and active network checks return false.
+     * Results are cached until relevant P2P or AP state broadcasts invalidate the cache.
      */
     private fun hasActiveHotspotOrP2pInterface(): Boolean {
+        val cached = cachedP2pOrHotspotInterfaceState
+        if (cached != null && isMonitoring) {
+            return cached
+        }
+        val active = scanForHotspotOrP2pInterface()
+        if (isMonitoring) {
+            cachedP2pOrHotspotInterfaceState = active
+        }
+        return active
+    }
+
+    private fun scanForHotspotOrP2pInterface(): Boolean {
         try {
             val interfaces = NetworkInterface.getNetworkInterfaces() ?: return false
             while (interfaces.hasMoreElements()) {
@@ -405,7 +419,7 @@ class ConnectivityMonitor(
         }
 
         val isWifiFast = isWifiEnabledFast()
-        if (!isWifiFast && !cachedP2pOrHotspotActive) {
+        if (!isWifiFast && !cachedP2pOrHotspotActive && (cachedP2pOrHotspotInterfaceState != true)) {
             currentNetwork = null
             cachedIpAddress = null
             publishState(bluetoothOn, false, null)
@@ -457,32 +471,62 @@ class ConnectivityMonitor(
 
     private fun scheduleAsyncFallbackUpdate() {
         val gen = updateGeneration.incrementAndGet()
+        if (isFallbackRunning.get()) {
+            pendingFallbackUpdate.set(true)
+            return
+        }
         updateScope.launch {
-            val ip = scanInterfacesForLocalIp()
-            if (updateGeneration.get() != gen) {
-                return@launch // Discard stale scan result from older generation
+            runFallbackWorker(gen)
+        }
+    }
+
+    private suspend fun runFallbackWorker(initialGen: Long) {
+        if (!isFallbackRunning.compareAndSet(false, true)) {
+            pendingFallbackUpdate.set(true)
+            return
+        }
+        try {
+            var currentGen = initialGen
+            while (isMonitoring) {
+                val ip = scanInterfacesForLocalIp()
+                if (updateGeneration.get() == currentGen && isMonitoring) {
+                    val bluetoothOn = isBluetoothEnabled()
+                    val isWifi = isWifiEnabled() || ip != null
+                    if (updateGeneration.get() == currentGen && isMonitoring) {
+                        if (ip != null) {
+                            cachedIpAddress = ip
+                        }
+                        publishState(bluetoothOn, isWifi, ip)
+                    }
+                }
+                if (pendingFallbackUpdate.compareAndSet(true, false) && isMonitoring) {
+                    currentGen = updateGeneration.incrementAndGet()
+                } else {
+                    break
+                }
             }
-            val bluetoothOn = isBluetoothEnabled()
-            val isWifi = isWifiEnabled() || ip != null
-            if (ip != null) {
-                cachedIpAddress = ip
+        } finally {
+            isFallbackRunning.set(false)
+            if (pendingFallbackUpdate.get() && isMonitoring) {
+                scheduleAsyncFallbackUpdate()
             }
-            publishState(bluetoothOn, isWifi, ip)
         }
     }
 
     private fun performFallbackScanUpdate() {
         val gen = updateGeneration.incrementAndGet()
         val ip = scanInterfacesForLocalIp()
-        if (updateGeneration.get() != gen) {
+        if (updateGeneration.get() != gen || !isMonitoring) {
             return // Discard stale scan result from older generation
         }
         val bluetoothOn = isBluetoothEnabled()
         val isWifi = isWifiEnabled() || ip != null
-        if (ip != null) {
-            cachedIpAddress = ip
+        if (updateGeneration.get() == gen && isMonitoring) {
+            if (ip != null) {
+                cachedIpAddress = ip
+            }
+            publishState(bluetoothOn, isWifi, ip)
         }
-        publishState(bluetoothOn, isWifi, ip)
     }
 
     /**
@@ -534,19 +578,24 @@ class ConnectivityMonitor(
                     }
                     "android.net.wifi.WIFI_AP_STATE_CHANGED" -> {
                         val apState = intent.getIntExtra("wifi_state", 14)
-                        cachedP2pOrHotspotActive = (apState == 13) // WIFI_AP_STATE_ENABLED = 13
+                        val isApOn = (apState == 13) // WIFI_AP_STATE_ENABLED = 13
+                        cachedP2pOrHotspotActive = isApOn
+                        cachedP2pOrHotspotInterfaceState = if (isApOn) true else null
                         cachedIpAddress = null
                         updateGeneration.incrementAndGet()
                         updateState()
                     }
                     "android.net.wifi.p2p.CONNECTION_STATE_CHANGE" -> {
+                        cachedP2pOrHotspotInterfaceState = null
                         cachedIpAddress = null
                         updateGeneration.incrementAndGet()
                         updateState()
                     }
                     "android.net.wifi.p2p.STATE_CHANGED" -> {
                         val p2pState = intent.getIntExtra("wifi_p2p_state", 1)
-                        cachedP2pOrHotspotActive = (p2pState == 2) // WIFI_P2P_STATE_ENABLED = 2
+                        val isP2pOn = (p2pState == 2) // WIFI_P2P_STATE_ENABLED = 2
+                        cachedP2pOrHotspotActive = isP2pOn
+                        cachedP2pOrHotspotInterfaceState = if (isP2pOn) null else false
                         cachedIpAddress = null
                         updateState()
                     }
@@ -751,5 +800,8 @@ class ConnectivityMonitor(
         cachedBluetoothOn = null
         cachedWifiOn = null
         cachedP2pOrHotspotActive = false
+        cachedP2pOrHotspotInterfaceState = null
+        isFallbackRunning.set(false)
+        pendingFallbackUpdate.set(false)
     }
 }

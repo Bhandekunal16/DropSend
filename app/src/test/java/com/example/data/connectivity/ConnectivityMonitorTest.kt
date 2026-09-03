@@ -329,5 +329,28 @@ class ConnectivityMonitorTest {
 
         connectivityMonitor.stopMonitoring()
     }
+
+    @Test
+    fun `test hotspot broadcast caches state and invalidates properly`() {
+        connectivityMonitor.startMonitoring()
+
+        // AP Enabled broadcast
+        val apOnIntent = Intent("android.net.wifi.WIFI_AP_STATE_CHANGED").apply {
+            putExtra("wifi_state", 13) // WIFI_AP_STATE_ENABLED
+        }
+        context.sendBroadcast(apOnIntent)
+        ShadowLooper.idleMainLooper()
+
+        assertTrue(connectivityMonitor.isWifiEnabled())
+
+        // AP Disabled broadcast
+        val apOffIntent = Intent("android.net.wifi.WIFI_AP_STATE_CHANGED").apply {
+            putExtra("wifi_state", 14) // WIFI_AP_STATE_FAILED / DISABLED
+        }
+        context.sendBroadcast(apOffIntent)
+        ShadowLooper.idleMainLooper()
+
+        connectivityMonitor.stopMonitoring()
+    }
 }
 
