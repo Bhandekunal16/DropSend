@@ -1,4 +1,4 @@
-
+```kotlin
 package com.example.data.db
 
 import androidx.room.Dao
@@ -9,14 +9,17 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TransferHistoryDao {
+
     /**
      * Inserts a single completed/failed/cancelled transfer.
+     *
+     * Do not use this for live transfer progress updates.
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: TransferHistoryEntity): Long
 
     /**
-     * Inserts multiple transfer records efficiently.
+     * Efficient batch insertion.
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(entities: List<TransferHistoryEntity>)
@@ -24,8 +27,7 @@ interface TransferHistoryDao {
     /**
      * Observes the newest transfer records.
      *
-     * Bounded result prevents unnecessary memory allocation
-     * and large UI updates.
+     * Preferred query for UI/history screens.
      */
     @Query(
         """
@@ -35,11 +37,19 @@ interface TransferHistoryDao {
         LIMIT :limit
         """,
     )
-    fun getRecentHistory(limit: Int = DEFAULT_LIMIT): Flow<List<TransferHistoryEntity>>
+    fun getRecentHistory(
+        limit: Int = DEFAULT_LIMIT,
+    ): Flow<List<TransferHistoryEntity>>
 
     /**
-     * Backward-compatible history stream.
+     * Legacy unbounded history query.
+     *
+     * Prefer getRecentHistory() for new code.
      */
+    @Deprecated(
+        message = "Use getRecentHistory() to keep the result bounded.",
+        ReplaceWith("getRecentHistory()"),
+    )
     @Query(
         """
         SELECT *
@@ -69,7 +79,7 @@ interface TransferHistoryDao {
     ): Flow<List<TransferHistoryEntity>>
 
     /**
-     * Deletes one history record.
+     * Deletes one transfer history record.
      */
     @Query(
         """
@@ -94,7 +104,7 @@ interface TransferHistoryDao {
     /**
      * Keeps only the newest [keepCount] records.
      *
-     * The caller should pass a positive value.
+     * Call periodically rather than after every insert.
      */
     @Query(
         """
@@ -107,9 +117,12 @@ interface TransferHistoryDao {
         )
         """,
     )
-    suspend fun trimToLatest(keepCount: Int)
+    suspend fun trimToLatest(
+        keepCount: Int,
+    )
 
     companion object {
         const val DEFAULT_LIMIT = 100
     }
 }
+```
