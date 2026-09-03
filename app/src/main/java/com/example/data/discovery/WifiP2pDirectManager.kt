@@ -107,9 +107,10 @@ class WifiP2pDirectManager(
     private val _connectionInfo = MutableStateFlow<WifiP2pInfo?>(null)
     val connectionInfo: StateFlow<WifiP2pInfo?> = _connectionInfo.asStateFlow()
 
-    private val coalescedPeerRequestRunnable = Runnable {
-        requestPeersInternal()
-    }
+    private val coalescedPeerRequestRunnable =
+        Runnable {
+            requestPeersInternal()
+        }
 
     private val intentFilter: IntentFilter by lazy {
         IntentFilter().apply {
@@ -175,8 +176,10 @@ class WifiP2pDirectManager(
                     WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
                         synchronized(stateLock) {
                             if (isReleased ||
-                                (lifecycleState != DiscoveryLifecycleState.ACTIVE &&
-                                 lifecycleState != DiscoveryLifecycleState.STARTING)
+                                (
+                                    lifecycleState != DiscoveryLifecycleState.ACTIVE &&
+                                        lifecycleState != DiscoveryLifecycleState.STARTING
+                                )
                             ) {
                                 return
                             }
@@ -211,8 +214,10 @@ class WifiP2pDirectManager(
 
         synchronized(stateLock) {
             if (isReleased ||
-                (lifecycleState != DiscoveryLifecycleState.ACTIVE &&
-                 lifecycleState != DiscoveryLifecycleState.STARTING)
+                (
+                    lifecycleState != DiscoveryLifecycleState.ACTIVE &&
+                        lifecycleState != DiscoveryLifecycleState.STARTING
+                )
             ) {
                 isPeerRequestInFlight = false
                 hasPendingPeerRequest = false
@@ -220,14 +225,16 @@ class WifiP2pDirectManager(
             }
             activeGen = discoveryGeneration
             activeSessionId = currentSession?.sessionId ?: ""
-            val m = wifiP2pManager ?: run {
-                isPeerRequestInFlight = false
-                return
-            }
-            val c = channel ?: run {
-                isPeerRequestInFlight = false
-                return
-            }
+            val m =
+                wifiP2pManager ?: run {
+                    isPeerRequestInFlight = false
+                    return
+                }
+            val c =
+                channel ?: run {
+                    isPeerRequestInFlight = false
+                    return
+                }
             mgr = m
             ch = c
             isPeerRequestInFlight = true
@@ -263,8 +270,10 @@ class WifiP2pDirectManager(
             if (hasPendingPeerRequest) {
                 hasPendingPeerRequest = false
                 if (!isReleased &&
-                    (lifecycleState == DiscoveryLifecycleState.ACTIVE ||
-                     lifecycleState == DiscoveryLifecycleState.STARTING)
+                    (
+                        lifecycleState == DiscoveryLifecycleState.ACTIVE ||
+                            lifecycleState == DiscoveryLifecycleState.STARTING
+                    )
                 ) {
                     shouldRequery = true
                 }
@@ -672,14 +681,16 @@ class WifiP2pDirectManager(
                 if (DEBUG) Log.d(TAG, "Connection already in flight for $deviceAddress")
                 return
             }
-            val m = wifiP2pManager ?: run {
-                onFailure(-1)
-                return
-            }
-            val c = channel ?: run {
-                onFailure(-1)
-                return
-            }
+            val m =
+                wifiP2pManager ?: run {
+                    onFailure(-1)
+                    return
+                }
+            val c =
+                channel ?: run {
+                    onFailure(-1)
+                    return
+                }
             mgr = m
             ch = c
             pendingConnectAddress = deviceAddress
@@ -757,14 +768,16 @@ class WifiP2pDirectManager(
                 if (DEBUG) Log.d(TAG, "Group creation already in flight")
                 return
             }
-            val m = wifiP2pManager ?: run {
-                onFailure(-1)
-                return
-            }
-            val c = channel ?: run {
-                onFailure(-1)
-                return
-            }
+            val m =
+                wifiP2pManager ?: run {
+                    onFailure(-1)
+                    return
+                }
+            val c =
+                channel ?: run {
+                    onFailure(-1)
+                    return
+                }
             mgr = m
             ch = c
             isGroupCreationPending = true

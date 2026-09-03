@@ -107,7 +107,9 @@ class LanDiscoveryService(
 
     // Network Interface & Broadcast Address Cache
     @Volatile private var cachedLocalIps: List<String> = emptyList()
+
     @Volatile private var cachedBroadcastAddrs: List<InetAddress> = emptyList()
+
     @Volatile private var lastInterfaceQueryTime: Long = 0L
 
     // Multicast Lock
