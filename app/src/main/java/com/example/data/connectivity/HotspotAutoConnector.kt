@@ -23,13 +23,12 @@ data class QrConnectionParams(
     val ipAddress: String,
     val port: Int = 8888,
     val deviceName: String = "Nearby Device",
-    val deviceId: String = ""
+    val deviceId: String = "",
 )
 
 class HotspotAutoConnector(
-    context: Context
+    context: Context,
 ) {
-
     companion object {
         private const val TAG = "HotspotAutoConnector"
         private const val CONNECTION_TIMEOUT_MS = 15_000L
@@ -38,7 +37,7 @@ class HotspotAutoConnector(
 
         private val IP_PORT_REGEX =
             Regex(
-                """^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(?::([0-9]{1,5}))?$"""
+                """^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(?::([0-9]{1,5}))?$""",
             )
     }
 
@@ -102,22 +101,26 @@ class HotspotAutoConnector(
         return parseDirectIp(trimmed)
     }
 
-    private fun parseDropSendUri(content: String): QrConnectionParams? {
-        return try {
+    private fun parseDropSendUri(content: String): QrConnectionParams? =
+        try {
             val uri = Uri.parse(content)
 
             val ssid = uri.getQueryParameter("ssid").orEmpty()
             val passphrase = uri.getQueryParameter("pass").orEmpty()
 
-            val ip = uri.getQueryParameter("ip")
-                ?.takeIf(::isValidIpv4)
-                ?: DEFAULT_IP
+            val ip =
+                uri
+                    .getQueryParameter("ip")
+                    ?.takeIf(::isValidIpv4)
+                    ?: DEFAULT_IP
 
-            val port = uri.getQueryParameter("port")
-                ?.let { value ->
-                    value.toIntOrNull()?.takeIf { it in 1..65_535 }
-                }
-                ?: DEFAULT_PORT
+            val port =
+                uri
+                    .getQueryParameter("port")
+                    ?.let { value ->
+                        value.toIntOrNull()?.takeIf { it in 1..65_535 }
+                    }
+                    ?: DEFAULT_PORT
 
             val deviceName =
                 uri.getQueryParameter("dev") ?: "Nearby Receiver"
@@ -132,13 +135,12 @@ class HotspotAutoConnector(
                 ipAddress = ip,
                 port = port,
                 deviceName = deviceName,
-                deviceId = deviceId
+                deviceId = deviceId,
             )
         } catch (e: Exception) {
             Log.w(TAG, "Failed to parse dropsend URI: ${e.message}")
             null
         }
-    }
 
     private fun parseDirectIp(content: String): QrConnectionParams? {
         val match = IP_PORT_REGEX.matchEntire(content) ?: return null
@@ -151,12 +153,13 @@ class HotspotAutoConnector(
 
         val rawPort = match.groupValues[2]
 
-        val port = if (rawPort.isEmpty()) {
-            DEFAULT_PORT
-        } else {
-            rawPort.toIntOrNull()?.takeIf { it in 1..65_535 }
-                ?: return null
-        }
+        val port =
+            if (rawPort.isEmpty()) {
+                DEFAULT_PORT
+            } else {
+                rawPort.toIntOrNull()?.takeIf { it in 1..65_535 }
+                    ?: return null
+            }
 
         return QrConnectionParams(
             ssid = "",
@@ -164,7 +167,7 @@ class HotspotAutoConnector(
             ipAddress = ip,
             port = port,
             deviceName = "Direct IP $ip",
-            deviceId = ip.takeLast(4)
+            deviceId = ip.takeLast(4),
         )
     }
 
@@ -178,8 +181,9 @@ class HotspotAutoConnector(
                     return false
                 }
 
-                val value = ip.substring(start, i).toIntOrNull()
-                    ?: return false
+                val value =
+                    ip.substring(start, i).toIntOrNull()
+                        ?: return false
 
                 if (value !in 0..255) {
                     return false
@@ -234,11 +238,12 @@ class HotspotAutoConnector(
                 valueEnd++
             }
 
-            val value = unescapeWifiValue(
-                content,
-                colonIndex + 1,
-                valueEnd
-            )
+            val value =
+                unescapeWifiValue(
+                    content,
+                    colonIndex + 1,
+                    valueEnd,
+                )
 
             when (key.uppercase()) {
                 "S" -> ssid = value
@@ -262,14 +267,14 @@ class HotspotAutoConnector(
             ipAddress = DEFAULT_IP,
             port = DEFAULT_PORT,
             deviceName = ssid.ifBlank { "Nearby Hotspot" },
-            deviceId = ssid.takeLast(4)
+            deviceId = ssid.takeLast(4),
         )
     }
 
     private fun unescapeWifiValue(
         content: String,
         start: Int,
-        end: Int
+        end: Int,
     ): String {
         var requiresUnescape = false
 
@@ -315,9 +320,8 @@ class HotspotAutoConnector(
      */
     suspend fun connectToHotspotNetwork(
         params: QrConnectionParams,
-        onStatusUpdate: (String) -> Unit = {}
+        onStatusUpdate: (String) -> Unit = {},
     ): Boolean {
-
         /*
          * Direct IP mode does not require a WifiNetworkSpecifier.
          */
@@ -326,7 +330,7 @@ class HotspotAutoConnector(
             Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
         ) {
             onStatusUpdate(
-                "Connecting directly to ${params.ipAddress}:${params.port}..."
+                "Connecting directly to ${params.ipAddress}:${params.port}...",
             )
             return true
         }
@@ -385,111 +389,112 @@ class HotspotAutoConnector(
             } catch (e: Exception) {
                 Log.w(
                     TAG,
-                    "Status callback failed: ${e.message}"
+                    "Status callback failed: ${e.message}",
                 )
             }
         }
 
         emitStatus(
-            "Connecting to Receiver's Hotspot: ${params.ssid}..."
+            "Connecting to Receiver's Hotspot: ${params.ssid}...",
         )
 
         val specifierBuilder =
-            WifiNetworkSpecifier.Builder()
+            WifiNetworkSpecifier
+                .Builder()
                 .setSsid(params.ssid)
 
         if (params.passphrase.isNotBlank()) {
             try {
                 specifierBuilder.setWpa2Passphrase(
-                    params.passphrase
+                    params.passphrase,
                 )
             } catch (e: IllegalArgumentException) {
                 Log.e(
                     TAG,
-                    "Invalid WPA2 passphrase: ${e.message}"
+                    "Invalid WPA2 passphrase: ${e.message}",
                 )
                 return false
             }
         }
 
         val request =
-            NetworkRequest.Builder()
+            NetworkRequest
+                .Builder()
                 .addTransportType(
-                    NetworkCapabilities.TRANSPORT_WIFI
+                    NetworkCapabilities.TRANSPORT_WIFI,
                 )
                 /*
                  * Receiver hotspots frequently have no Internet.
                  */
                 .removeCapability(
-                    NetworkCapabilities.NET_CAPABILITY_INTERNET
-                )
-                .setNetworkSpecifier(
-                    specifierBuilder.build()
-                )
-                .build()
+                    NetworkCapabilities.NET_CAPABILITY_INTERNET,
+                ).setNetworkSpecifier(
+                    specifierBuilder.build(),
+                ).build()
 
-        val success = withTimeoutOrNull(
-            CONNECTION_TIMEOUT_MS
-        ) {
-            suspendCancellableCoroutine { continuation ->
+        val success =
+            withTimeoutOrNull(
+                CONNECTION_TIMEOUT_MS,
+            ) {
+                suspendCancellableCoroutine { continuation ->
 
-                val callback =
-                    createNetworkCallback(
-                        cm = cm,
-                        attemptId = attemptId,
-                        continuation = continuation,
-                        emitStatus = ::emitStatus
-                    )
+                    val callback =
+                        createNetworkCallback(
+                            cm = cm,
+                            attemptId = attemptId,
+                            continuation = continuation,
+                            emitStatus = ::emitStatus,
+                        )
 
-                val registration =
-                    NetworkCallbackRegistration(
-                        attemptId = attemptId,
-                        callback = callback,
-                        cm = cm
-                    )
+                    val registration =
+                        NetworkCallbackRegistration(
+                            attemptId = attemptId,
+                            callback = callback,
+                            cm = cm,
+                        )
 
                 /*
                  * Publish registration before requesting the network
                  * so release()/a newer attempt can see it.
                  */
-                synchronized(stateLock) {
-                    if (currentAttemptId != attemptId) {
-                        continuation.resume(false)
-                        return@suspendCancellableCoroutine
+                    synchronized(stateLock) {
+                        if (currentAttemptId != attemptId) {
+                            continuation.resume(false)
+                            return@suspendCancellableCoroutine
+                        }
+
+                        activeRegistration = registration
+                        activeContinuation = continuation
                     }
 
-                    activeRegistration = registration
-                    activeContinuation = continuation
-                }
-
-                continuation.invokeOnCancellation {
-                    cleanupAttempt(
-                        attemptId = attemptId,
-                        registration = registration,
-                        continuation = continuation
-                    )
-                }
+                    continuation.invokeOnCancellation {
+                        cleanupAttempt(
+                            attemptId = attemptId,
+                            registration = registration,
+                            continuation = continuation,
+                        )
+                    }
 
                 /*
                  * Register safely even if release() races with this call.
                  */
-                if (!registration.request(request)) {
-                    cleanupAttempt(
-                        attemptId = attemptId,
-                        registration = registration,
-                        continuation = continuation
-                    )
+                    if (!registration.request(request)) {
+                        cleanupAttempt(
+                            attemptId = attemptId,
+                            registration = registration,
+                            continuation = continuation,
+                        )
 
-                    if (continuation.isActive) {
-                        continuation.resume(false)
+                        if (continuation.isActive) {
+                            continuation.resume(false)
+                        }
                     }
                 }
-            }
-        } == true
+            } == true
 
         if (!success) {
             cleanupCurrentAttempt(
-                attemptId = attemptId
+                attemptId = attemptId,
             )
 
             unbindProcessNetwork()
@@ -502,16 +507,14 @@ class HotspotAutoConnector(
         cm: ConnectivityManager,
         attemptId: Long,
         continuation: CancellableContinuation<Boolean>,
-        emitStatus: (String) -> Unit
+        emitStatus: (String) -> Unit,
     ): ConnectivityManager.NetworkCallback {
-
         return object : ConnectivityManager.NetworkCallback() {
-
             override fun onAvailable(network: Network) {
                 if (!isCurrentAttempt(attemptId)) {
                     Log.d(
                         TAG,
-                        "Ignoring stale onAvailable: $attemptId"
+                        "Ignoring stale onAvailable: $attemptId",
                     )
                     return
                 }
@@ -523,20 +526,20 @@ class HotspotAutoConnector(
                 } catch (e: Exception) {
                     Log.w(
                         TAG,
-                        "Failed binding process to network: ${e.message}"
+                        "Failed binding process to network: ${e.message}",
                     )
                 }
 
                 if (!bound) {
                     Log.w(
                         TAG,
-                        "Unable to bind process to network: $network"
+                        "Unable to bind process to network: $network",
                     )
 
                     resumeAttempt(
                         attemptId = attemptId,
                         continuation = continuation,
-                        success = false
+                        success = false,
                     )
 
                     return
@@ -546,17 +549,17 @@ class HotspotAutoConnector(
 
                 Log.d(
                     TAG,
-                    "Receiver hotspot connected: $network"
+                    "Receiver hotspot connected: $network",
                 )
 
                 emitStatus(
-                    "Connected to hotspot! Establishing secure channel..."
+                    "Connected to hotspot! Establishing secure channel...",
                 )
 
                 resumeAttempt(
                     attemptId = attemptId,
                     continuation = continuation,
-                    success = true
+                    success = true,
                 )
             }
 
@@ -567,13 +570,13 @@ class HotspotAutoConnector(
 
                 Log.w(
                     TAG,
-                    "Receiver hotspot unavailable: $attemptId"
+                    "Receiver hotspot unavailable: $attemptId",
                 )
 
                 resumeAttempt(
                     attemptId = attemptId,
                     continuation = continuation,
-                    success = false
+                    success = false,
                 )
             }
 
@@ -584,7 +587,7 @@ class HotspotAutoConnector(
 
                 Log.d(
                     TAG,
-                    "Receiver hotspot lost: $network"
+                    "Receiver hotspot lost: $network",
                 )
 
                 unbindProcessNetwork()
@@ -595,7 +598,7 @@ class HotspotAutoConnector(
     private fun resumeAttempt(
         attemptId: Long,
         continuation: CancellableContinuation<Boolean>,
-        success: Boolean
+        success: Boolean,
     ) {
         var target: CancellableContinuation<Boolean>? = null
 
@@ -616,7 +619,7 @@ class HotspotAutoConnector(
     private fun cleanupAttempt(
         attemptId: Long,
         registration: NetworkCallbackRegistration,
-        continuation: CancellableContinuation<Boolean>
+        continuation: CancellableContinuation<Boolean>,
     ) {
         synchronized(stateLock) {
             if (
@@ -635,9 +638,7 @@ class HotspotAutoConnector(
         }
     }
 
-    private fun cleanupCurrentAttempt(
-        attemptId: Long
-    ) {
+    private fun cleanupCurrentAttempt(attemptId: Long) {
         var registration: NetworkCallbackRegistration? = null
 
         synchronized(stateLock) {
@@ -651,11 +652,7 @@ class HotspotAutoConnector(
         registration?.cleanup()
     }
 
-    private fun isCurrentAttempt(
-        attemptId: Long
-    ): Boolean {
-        return currentAttemptId == attemptId
-    }
+    private fun isCurrentAttempt(attemptId: Long): Boolean = currentAttemptId == attemptId
 
     private fun unbindProcessNetwork() {
         if (!isProcessBound) {
@@ -667,7 +664,7 @@ class HotspotAutoConnector(
         } catch (e: Exception) {
             Log.w(
                 TAG,
-                "Failed clearing process network: ${e.message}"
+                "Failed clearing process network: ${e.message}",
             )
         } finally {
             isProcessBound = false
@@ -705,19 +702,15 @@ class HotspotAutoConnector(
     private class NetworkCallbackRegistration(
         private val attemptId: Long,
         val callback: ConnectivityManager.NetworkCallback,
-        private val cm: ConnectivityManager
+        private val cm: ConnectivityManager,
     ) {
-
         private val cleanedUp = AtomicBoolean(false)
         private val registered = AtomicBoolean(false)
 
         /**
          * Requests the network while handling a cancellation/release race.
          */
-        fun request(
-            request: NetworkRequest
-        ): Boolean {
-
+        fun request(request: NetworkRequest): Boolean {
             if (cleanedUp.get()) {
                 return false
             }
@@ -725,7 +718,7 @@ class HotspotAutoConnector(
             return try {
                 cm.requestNetwork(
                     request,
-                    callback
+                    callback,
                 )
 
                 registered.set(true)
@@ -743,7 +736,7 @@ class HotspotAutoConnector(
             } catch (e: Exception) {
                 Log.e(
                     TAG,
-                    "Network request failed for attempt $attemptId: ${e.message}"
+                    "Network request failed for attempt $attemptId: ${e.message}",
                 )
 
                 false
@@ -768,7 +761,7 @@ class HotspotAutoConnector(
             } catch (e: Exception) {
                 Log.w(
                     TAG,
-                    "Failed unregistering callback for attempt $attemptId: ${e.message}"
+                    "Failed unregistering callback for attempt $attemptId: ${e.message}",
                 )
             }
         }
