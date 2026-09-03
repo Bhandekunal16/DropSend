@@ -191,13 +191,15 @@ class ConnectivityMonitor(
                     .Builder()
                     .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
                     .build()
-            wifiNetworkCallback =
+            defaultNetworkCallback =
                 object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
+                        cachedIpAddress = null
                         updateState()
                     }
 
                     override fun onLost(network: Network) {
+                        cachedIpAddress = null
                         updateState()
                     }
 
@@ -205,6 +207,7 @@ class ConnectivityMonitor(
                         network: Network,
                         capabilities: NetworkCapabilities,
                     ) {
+                        cachedIpAddress = null
                         updateState()
                     }
                 }
