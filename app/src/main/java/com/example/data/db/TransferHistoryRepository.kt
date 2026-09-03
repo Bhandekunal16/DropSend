@@ -1,3 +1,4 @@
+```kotlin
 package com.example.data.db
 
 import kotlinx.coroutines.flow.Flow
@@ -5,15 +6,39 @@ import kotlinx.coroutines.flow.Flow
 class TransferHistoryRepository(
     private val dao: TransferHistoryDao,
 ) {
-    val allHistory: Flow<List<TransferHistoryEntity>> = dao.getAllHistory()
 
-    fun getRecentHistory(limit: Int = 100): Flow<List<TransferHistoryEntity>> =
+    /**
+     * Observe only the most recent transfers.
+     *
+     * Keeps UI memory usage and Flow emissions bounded.
+     */
+    fun getRecentHistory(limit: Int = DEFAULT_HISTORY_LIMIT): Flow<List<TransferHistoryEntity>> =
         dao.getRecentHistory(limit)
 
-    suspend fun recordTransfer(entity: TransferHistoryEntity): Long = dao.insert(entity)
+    /**
+     * Observe transfers filtered by status.
+     */
+    fun getHistoryByStatus(
+        status: String,
+        limit: Int = DEFAULT_HISTORY_LIMIT
+    ): Flow<List<TransferHistoryEntity>> =
+        dao.getHistoryByStatus(status, limit)
 
-    suspend fun recordTransfers(entities: List<TransferHistoryEntity>) {
-        dao.insertAll(entities)
+    /**
+     * Record a single completed/failed/cancelled transfer.
+     */
+    suspend fun recordTransfer(entity: TransferHistoryEntity): Long =
+        dao.insert(entity)
+
+    /**
+     * Record multiple transfers efficiently.
+     */
+    suspend fun recordTransfers(
+        entities: List<TransferHistoryEntity>
+    ) {
+        if (entities.isNotEmpty()) {
+            dao.insertAll(entities)
+        }
     }
 
     suspend fun deleteEntry(id: Long) {
@@ -24,7 +49,19 @@ class TransferHistoryRepository(
         dao.clearAll()
     }
 
-    suspend fun trimHistory(keepCount: Int = 100) {
-        dao.trimToLatest(keepCount)
+    /**
+     * Keep only the newest records.
+     */
+    suspend fun trimHistory(
+        keepCount: Int = DEFAULT_HISTORY_LIMIT
+    ) {
+        if (keepCount > 0) {
+            dao.trimToLatest(keepCount)
+        }
+    }
+
+    companion object {
+        private const val DEFAULT_HISTORY_LIMIT = 100
     }
 }
+```
