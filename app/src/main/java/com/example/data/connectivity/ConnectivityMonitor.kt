@@ -51,15 +51,22 @@ class ConnectivityMonitor(
     private var pollingJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    @Volatile
     private var cachedIpAddress: String? = null
+
+    @Volatile
+    private var cachedNetwork: Network? = null
 
     private fun computeCurrentState(): ConnectivityState {
         val bluetoothOn = isBluetoothEnabled()
         val wifiOn = isWifiEnabled()
+        val activeNetwork = connectivityManager?.activeNetwork
 
         if (!wifiOn) {
+            cachedNetwork = null
             cachedIpAddress = null
-        } else if (cachedIpAddress == null) {
+        } else if (activeNetwork != cachedNetwork || cachedIpAddress == null) {
+            cachedNetwork = activeNetwork
             cachedIpAddress = getLocalIpAddress()
         }
 
@@ -79,64 +86,28 @@ class ConnectivityMonitor(
             false
         }
 
-    /**
-     * Checks whether Wi-Fi radio is enabled or connected to a Wi-Fi/Ethernet/P2P/Hotspot network.
-     */
     fun isWifiEnabled(): Boolean {
-        // 1. WifiManager radio switch check
-        val isWmEnabled =
-            try {
-                wifiManager?.isWifiEnabled == true ||
-                    wifiManager?.wifiState == WifiManager.WIFI_STATE_ENABLED
-            } catch (_: Exception) {
-                false
+        try {
+            if (wifiManager?.isWifiEnabled == true ||
+                wifiManager?.wifiState == WifiManager.WIFI_STATE_ENABLED
+            ) {
+                return true
             }
+        } catch (_: SecurityException) {
+            // Continue with ConnectivityManager
+        } catch (_: Exception) {
+            // Continue with ConnectivityManager
+        }
 
-        if (isWmEnabled) return true
-
-        // 2. ConnectivityManager active network check (Wi-Fi or Ethernet/Hotspot)
-        val isNetworkConnected =
-            try {
-                val cm = connectivityManager
-                val active = cm?.activeNetwork
-                if (active != null) {
-                    val caps = cm.getNetworkCapabilities(active)
-                    caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true ||
-                        caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true
-                } else {
-                    false
-                }
-            } catch (_: Exception) {
-                false
-            }
-
-        if (isNetworkConnected) return true
-
-        // 3. Network Interfaces check (Wi-Fi Direct, Local-only Hotspot, wlan, p2p, ap)
         return try {
-            val interfaces = NetworkInterface.getNetworkInterfaces() ?: return false
-            var activeWifiInterface = false
-            while (interfaces.hasMoreElements()) {
-                val iface = interfaces.nextElement()
-                val name = iface.name.lowercase()
-                if (iface.isUp && !iface.isLoopback &&
-                    (
-                        name.startsWith("wlan") || name.startsWith("p2p") || name.startsWith("ap") || name.startsWith("eth") ||
-                            name.startsWith("rndis")
-                    )
-                ) {
-                    val addrs = iface.inetAddresses
-                    while (addrs.hasMoreElements()) {
-                        val addr = addrs.nextElement()
-                        if (!addr.isLoopbackAddress && addr is Inet4Address) {
-                            activeWifiInterface = true
-                            break
-                        }
-                    }
-                }
-                if (activeWifiInterface) break
-            }
-            activeWifiInterface
+            val cm = connectivityManager ?: return false
+            val network = cm.activeNetwork ?: return false
+            val capabilities = cm.getNetworkCapabilities(network) ?: return false
+
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        } catch (_: SecurityException) {
+            false
         } catch (_: Exception) {
             false
         }
@@ -189,10 +160,12 @@ class ConnectivityMonitor(
             defaultNetworkCallback =
                 object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
+                        cachedIpAddress = null
                         updateState()
                     }
 
                     override fun onLost(network: Network) {
+                        cachedIpAddress = null
                         updateState()
                     }
 
@@ -200,6 +173,7 @@ class ConnectivityMonitor(
                         network: Network,
                         capabilities: NetworkCapabilities,
                     ) {
+                        cachedIpAddress = null
                         updateState()
                     }
                 }
