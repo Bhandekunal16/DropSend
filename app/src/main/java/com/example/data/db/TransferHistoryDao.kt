@@ -41,6 +41,12 @@ interface TransferHistoryDao {
     fun getRecentHistory(limit: Int = DEFAULT_LIMIT): Flow<List<TransferHistoryEntity>>
 
     /**
+     * Backward-compatible unbounded query.
+     */
+    @Query("SELECT * FROM transfer_history ORDER BY timestamp DESC")
+    fun getAllHistory(): Flow<List<TransferHistoryEntity>>
+
+    /**
      * Observe recent transfers with a specific status.
      *
      * Optimized by the (status, timestamp) index.

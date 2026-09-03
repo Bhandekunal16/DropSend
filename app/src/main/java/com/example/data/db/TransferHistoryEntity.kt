@@ -8,9 +8,10 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "transfer_history",
     indices = [
+        Index(value = ["timestamp"]),
         Index(value = ["status", "timestamp"]),
-        Index(value = ["sessionId"])
-    ]
+        Index(value = ["sessionId"]),
+    ],
 )
 data class TransferHistoryEntity(
 

@@ -1,4 +1,3 @@
-```kotlin
 package com.example.data.db
 
 import kotlinx.coroutines.flow.Flow
@@ -6,6 +5,10 @@ import kotlinx.coroutines.flow.Flow
 class TransferHistoryRepository(
     private val dao: TransferHistoryDao,
 ) {
+    /**
+     * Backward-compatible stream of transfer history for ViewModel and UI.
+     */
+    val allHistory: Flow<List<TransferHistoryEntity>> = dao.getAllHistory()
 
     /**
      * Observe only the most recent transfers.
@@ -20,7 +23,7 @@ class TransferHistoryRepository(
      */
     fun getHistoryByStatus(
         status: String,
-        limit: Int = DEFAULT_HISTORY_LIMIT
+        limit: Int = DEFAULT_HISTORY_LIMIT,
     ): Flow<List<TransferHistoryEntity>> =
         dao.getHistoryByStatus(status, limit)
 
@@ -34,7 +37,7 @@ class TransferHistoryRepository(
      * Record multiple transfers efficiently.
      */
     suspend fun recordTransfers(
-        entities: List<TransferHistoryEntity>
+        entities: List<TransferHistoryEntity>,
     ) {
         if (entities.isNotEmpty()) {
             dao.insertAll(entities)
@@ -53,7 +56,7 @@ class TransferHistoryRepository(
      * Keep only the newest records.
      */
     suspend fun trimHistory(
-        keepCount: Int = DEFAULT_HISTORY_LIMIT
+        keepCount: Int = DEFAULT_HISTORY_LIMIT,
     ) {
         if (keepCount > 0) {
             dao.trimToLatest(keepCount)
@@ -64,4 +67,4 @@ class TransferHistoryRepository(
         private const val DEFAULT_HISTORY_LIMIT = 100
     }
 }
-```
+
