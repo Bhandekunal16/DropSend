@@ -9,7 +9,6 @@ import java.io.InputStream
 import java.io.OutputStream
 
 sealed class ProtocolMessage {
-
     companion object {
         const val MAGIC_NUMBER = 0x44524F50 // "DROP"
         const val PROTOCOL_VERSION = 2
@@ -18,9 +17,7 @@ sealed class ProtocolMessage {
         const val MAX_CHUNK_SIZE = 1024 * 1024 // 1 MB payload limit
         const val MAX_MESSAGE_SIZE = 16 * 1024 * 1024 // 16 MB limit
 
-        fun isVersionSupported(version: Int): Boolean {
-            return version in MIN_COMPATIBLE_VERSION..MAX_COMPATIBLE_VERSION
-        }
+        fun isVersionSupported(version: Int): Boolean = version in MIN_COMPATIBLE_VERSION..MAX_COMPATIBLE_VERSION
 
         const val TYPE_HELLO: Byte = 1
         const val TYPE_SESSION_REQUEST: Byte = 2
@@ -44,24 +41,27 @@ sealed class ProtocolMessage {
 
         fun readFromStream(input: InputStream): ProtocolMessage? {
             val dis = DataInputStream(input)
-            val magic = try {
-                dis.readInt()
-            } catch (e: Exception) {
-                return null
-            }
+            val magic =
+                try {
+                    dis.readInt()
+                } catch (e: Exception) {
+                    return null
+                }
             if (magic != MAGIC_NUMBER) return null
 
-            val type = try {
-                dis.readByte()
-            } catch (e: Exception) {
-                return null
-            }
+            val type =
+                try {
+                    dis.readByte()
+                } catch (e: Exception) {
+                    return null
+                }
 
-            val totalLength = try {
-                dis.readInt()
-            } catch (e: Exception) {
-                return null
-            }
+            val totalLength =
+                try {
+                    dis.readInt()
+                } catch (e: Exception) {
+                    return null
+                }
 
             // Sanity check length to prevent OOM
             if (totalLength < 0 || totalLength > 16 * 1024 * 1024) {
@@ -78,9 +78,10 @@ sealed class ProtocolMessage {
                             deviceId = json.getString("deviceId"),
                             deviceName = json.getString("deviceName"),
                             protocolVersion = json.optInt("protocolVersion", PROTOCOL_VERSION),
-                            publicKeyBase64 = json.optString("publicKey", "")
+                            publicKeyBase64 = json.optString("publicKey", ""),
                         )
                     }
+
                     TYPE_AUTH_HANDSHAKE -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
@@ -88,9 +89,10 @@ sealed class ProtocolMessage {
                         AuthHandshake(
                             senderId = json.getString("senderId"),
                             sessionToken = json.getString("sessionToken"),
-                            publicKeyBase64 = json.getString("publicKey")
+                            publicKeyBase64 = json.getString("publicKey"),
                         )
                     }
+
                     TYPE_AUTH_HANDSHAKE_ACK -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
@@ -99,9 +101,10 @@ sealed class ProtocolMessage {
                             receiverId = json.getString("receiverId"),
                             sessionToken = json.getString("sessionToken"),
                             publicKeyBase64 = json.getString("publicKey"),
-                            verificationCode = json.getString("verificationCode")
+                            verificationCode = json.getString("verificationCode"),
                         )
                     }
+
                     TYPE_SESSION_REQUEST -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
@@ -116,8 +119,8 @@ sealed class ProtocolMessage {
                                     name = fo.getString("name"),
                                     mimeType = fo.optString("mimeType", "*/*"),
                                     size = fo.getLong("size"),
-                                    checksum = fo.optString("checksum", "")
-                                )
+                                    checksum = fo.optString("checksum", ""),
+                                ),
                             )
                         }
                         SessionRequest(
@@ -126,9 +129,10 @@ sealed class ProtocolMessage {
                             totalSize = json.getLong("totalSize"),
                             verificationCode = json.getString("verificationCode"),
                             files = filesList,
-                            sessionToken = json.optString("sessionToken", "")
+                            sessionToken = json.optString("sessionToken", ""),
                         )
                     }
+
                     TYPE_SESSION_ACCEPT -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
@@ -137,17 +141,19 @@ sealed class ProtocolMessage {
                             receiverId = json.getString("receiverId"),
                             receiverName = json.getString("receiverName"),
                             verificationCode = json.getString("verificationCode"),
-                            availableStorageBytes = json.optLong("availableStorageBytes", -1L)
+                            availableStorageBytes = json.optLong("availableStorageBytes", -1L),
                         )
                     }
+
                     TYPE_SESSION_REJECT -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
                         val json = JSONObject(String(bytes, Charsets.UTF_8))
                         SessionReject(
-                            reason = json.optString("reason", "Declined by user")
+                            reason = json.optString("reason", "Declined by user"),
                         )
                     }
+
                     TYPE_TRANSPORT_INFO -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
@@ -155,9 +161,10 @@ sealed class ProtocolMessage {
                         TransportInfo(
                             transport = json.getString("transport"),
                             ip = json.optString("ip", ""),
-                            port = json.getInt("port")
+                            port = json.getInt("port"),
                         )
                     }
+
                     TYPE_SESSION_RESUME_REQ -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
@@ -165,9 +172,10 @@ sealed class ProtocolMessage {
                         SessionResumeRequest(
                             sessionToken = json.getString("sessionToken"),
                             lastFileId = json.getString("lastFileId"),
-                            confirmedOffset = json.getLong("confirmedOffset")
+                            confirmedOffset = json.getLong("confirmedOffset"),
                         )
                     }
+
                     TYPE_SESSION_RESUME_ACK -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
@@ -175,9 +183,10 @@ sealed class ProtocolMessage {
                         SessionResumeAck(
                             accepted = json.getBoolean("accepted"),
                             resumeFileId = json.getString("resumeFileId"),
-                            resumeOffset = json.getLong("resumeOffset")
+                            resumeOffset = json.getLong("resumeOffset"),
                         )
                     }
+
                     TYPE_FILE_START -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
@@ -190,9 +199,10 @@ sealed class ProtocolMessage {
                             mimeType = json.optString("mimeType", "*/*"),
                             size = json.getLong("size"),
                             checksum = json.optString("checksum", ""),
-                            startOffset = json.optLong("startOffset", 0L)
+                            startOffset = json.optLong("startOffset", 0L),
                         )
                     }
+
                     TYPE_CHUNK -> {
                         val fileIdLen = dis.readShort().toInt()
                         if (fileIdLen <= 0 || fileIdLen > 256) return null
@@ -209,9 +219,10 @@ sealed class ProtocolMessage {
                             fileId = fileId,
                             sequence = sequence,
                             offset = offset,
-                            payload = payload
+                            payload = payload,
                         )
                     }
+
                     TYPE_CHUNK_ACK -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
@@ -219,40 +230,63 @@ sealed class ProtocolMessage {
                         ChunkAck(
                             fileId = json.getString("fileId"),
                             sequence = json.getLong("sequence"),
-                            bytesReceived = json.getLong("bytesReceived")
+                            bytesReceived = json.getLong("bytesReceived"),
                         )
                     }
+
                     TYPE_FILE_COMPLETE -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
                         val json = JSONObject(String(bytes, Charsets.UTF_8))
                         FileComplete(
                             fileId = json.getString("fileId"),
-                            checksum = json.getString("checksum")
+                            checksum = json.getString("checksum"),
                         )
                     }
+
                     TYPE_FILE_VERIFY_ACK -> {
                         val bytes = ByteArray(totalLength)
                         dis.readFully(bytes)
                         val json = JSONObject(String(bytes, Charsets.UTF_8))
                         FileVerifyAck(
                             fileId = json.getString("fileId"),
-                            success = json.getBoolean("success")
+                            success = json.getBoolean("success"),
                         )
                     }
-                    TYPE_TRANSFER_PAUSE -> TransferPause
-                    TYPE_TRANSFER_RESUME -> TransferResume
-                    TYPE_TRANSFER_COMPLETE -> TransferComplete
-                    TYPE_TRANSFER_CANCEL -> TransferCancel
-                    TYPE_SESSION_CLOSE -> SessionClose
-                    else -> null
+
+                    TYPE_TRANSFER_PAUSE -> {
+                        TransferPause
+                    }
+
+                    TYPE_TRANSFER_RESUME -> {
+                        TransferResume
+                    }
+
+                    TYPE_TRANSFER_COMPLETE -> {
+                        TransferComplete
+                    }
+
+                    TYPE_TRANSFER_CANCEL -> {
+                        TransferCancel
+                    }
+
+                    TYPE_SESSION_CLOSE -> {
+                        SessionClose
+                    }
+
+                    else -> {
+                        null
+                    }
                 }
             } catch (e: Exception) {
                 null
             }
         }
 
-        fun writeToStream(output: OutputStream, message: ProtocolMessage) {
+        fun writeToStream(
+            output: OutputStream,
+            message: ProtocolMessage,
+        ) {
             message.writeToStream(output)
         }
     }
@@ -264,24 +298,25 @@ sealed class ProtocolMessage {
         val name: String,
         val mimeType: String,
         val size: Long,
-        val checksum: String = ""
+        val checksum: String = "",
     )
 
     data class Hello(
         val deviceId: String,
         val deviceName: String,
         val protocolVersion: Int = PROTOCOL_VERSION,
-        val publicKeyBase64: String = ""
+        val publicKeyBase64: String = "",
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("deviceId", deviceId)
-                put("deviceName", deviceName)
-                put("protocolVersion", protocolVersion)
-                if (publicKeyBase64.isNotEmpty()) {
-                    put("publicKey", publicKeyBase64)
+            val json =
+                JSONObject().apply {
+                    put("deviceId", deviceId)
+                    put("deviceName", deviceName)
+                    put("protocolVersion", protocolVersion)
+                    if (publicKeyBase64.isNotEmpty()) {
+                        put("publicKey", publicKeyBase64)
+                    }
                 }
-            }
             writeJson(output, TYPE_HELLO, json)
         }
     }
@@ -289,14 +324,15 @@ sealed class ProtocolMessage {
     data class AuthHandshake(
         val senderId: String,
         val sessionToken: String,
-        val publicKeyBase64: String
+        val publicKeyBase64: String,
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("senderId", senderId)
-                put("sessionToken", sessionToken)
-                put("publicKey", publicKeyBase64)
-            }
+            val json =
+                JSONObject().apply {
+                    put("senderId", senderId)
+                    put("sessionToken", sessionToken)
+                    put("publicKey", publicKeyBase64)
+                }
             writeJson(output, TYPE_AUTH_HANDSHAKE, json)
         }
     }
@@ -305,15 +341,16 @@ sealed class ProtocolMessage {
         val receiverId: String,
         val sessionToken: String,
         val publicKeyBase64: String,
-        val verificationCode: String
+        val verificationCode: String,
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("receiverId", receiverId)
-                put("sessionToken", sessionToken)
-                put("publicKey", publicKeyBase64)
-                put("verificationCode", verificationCode)
-            }
+            val json =
+                JSONObject().apply {
+                    put("receiverId", receiverId)
+                    put("sessionToken", sessionToken)
+                    put("publicKey", publicKeyBase64)
+                    put("verificationCode", verificationCode)
+                }
             writeJson(output, TYPE_AUTH_HANDSHAKE_ACK, json)
         }
     }
@@ -324,29 +361,32 @@ sealed class ProtocolMessage {
         val totalSize: Long,
         val verificationCode: String,
         val files: List<FileMetadata>,
-        val sessionToken: String = ""
+        val sessionToken: String = "",
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("senderId", senderId)
-                put("senderName", senderName)
-                put("totalSize", totalSize)
-                put("verificationCode", verificationCode)
-                if (sessionToken.isNotEmpty()) {
-                    put("sessionToken", sessionToken)
+            val json =
+                JSONObject().apply {
+                    put("senderId", senderId)
+                    put("senderName", senderName)
+                    put("totalSize", totalSize)
+                    put("verificationCode", verificationCode)
+                    if (sessionToken.isNotEmpty()) {
+                        put("sessionToken", sessionToken)
+                    }
+                    val arr = JSONArray()
+                    files.forEach { f ->
+                        arr.put(
+                            JSONObject().apply {
+                                put("id", f.id)
+                                put("name", f.name)
+                                put("mimeType", f.mimeType)
+                                put("size", f.size)
+                                put("checksum", f.checksum)
+                            },
+                        )
+                    }
+                    put("files", arr)
                 }
-                val arr = JSONArray()
-                files.forEach { f ->
-                    arr.put(JSONObject().apply {
-                        put("id", f.id)
-                        put("name", f.name)
-                        put("mimeType", f.mimeType)
-                        put("size", f.size)
-                        put("checksum", f.checksum)
-                    })
-                }
-                put("files", arr)
-            }
             writeJson(output, TYPE_SESSION_REQUEST, json)
         }
     }
@@ -355,22 +395,25 @@ sealed class ProtocolMessage {
         val receiverId: String,
         val receiverName: String,
         val verificationCode: String,
-        val availableStorageBytes: Long = -1L
+        val availableStorageBytes: Long = -1L,
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("receiverId", receiverId)
-                put("receiverName", receiverName)
-                put("verificationCode", verificationCode)
-                if (availableStorageBytes >= 0) {
-                    put("availableStorageBytes", availableStorageBytes)
+            val json =
+                JSONObject().apply {
+                    put("receiverId", receiverId)
+                    put("receiverName", receiverName)
+                    put("verificationCode", verificationCode)
+                    if (availableStorageBytes >= 0) {
+                        put("availableStorageBytes", availableStorageBytes)
+                    }
                 }
-            }
             writeJson(output, TYPE_SESSION_ACCEPT, json)
         }
     }
 
-    data class SessionReject(val reason: String = "Declined by user") : ProtocolMessage() {
+    data class SessionReject(
+        val reason: String = "Declined by user",
+    ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
             val json = JSONObject().apply { put("reason", reason) }
             writeJson(output, TYPE_SESSION_REJECT, json)
@@ -380,14 +423,15 @@ sealed class ProtocolMessage {
     data class TransportInfo(
         val transport: String,
         val ip: String,
-        val port: Int
+        val port: Int,
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("transport", transport)
-                put("ip", ip)
-                put("port", port)
-            }
+            val json =
+                JSONObject().apply {
+                    put("transport", transport)
+                    put("ip", ip)
+                    put("port", port)
+                }
             writeJson(output, TYPE_TRANSPORT_INFO, json)
         }
     }
@@ -395,14 +439,15 @@ sealed class ProtocolMessage {
     data class SessionResumeRequest(
         val sessionToken: String,
         val lastFileId: String,
-        val confirmedOffset: Long
+        val confirmedOffset: Long,
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("sessionToken", sessionToken)
-                put("lastFileId", lastFileId)
-                put("confirmedOffset", confirmedOffset)
-            }
+            val json =
+                JSONObject().apply {
+                    put("sessionToken", sessionToken)
+                    put("lastFileId", lastFileId)
+                    put("confirmedOffset", confirmedOffset)
+                }
             writeJson(output, TYPE_SESSION_RESUME_REQ, json)
         }
     }
@@ -410,14 +455,15 @@ sealed class ProtocolMessage {
     data class SessionResumeAck(
         val accepted: Boolean,
         val resumeFileId: String,
-        val resumeOffset: Long
+        val resumeOffset: Long,
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("accepted", accepted)
-                put("resumeFileId", resumeFileId)
-                put("resumeOffset", resumeOffset)
-            }
+            val json =
+                JSONObject().apply {
+                    put("accepted", accepted)
+                    put("resumeFileId", resumeFileId)
+                    put("resumeOffset", resumeOffset)
+                }
             writeJson(output, TYPE_SESSION_RESUME_ACK, json)
         }
     }
@@ -430,21 +476,22 @@ sealed class ProtocolMessage {
         val mimeType: String,
         val size: Long,
         val checksum: String,
-        val startOffset: Long = 0L
+        val startOffset: Long = 0L,
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("fileIndex", fileIndex)
-                put("totalFiles", totalFiles)
-                put("fileId", fileId)
-                put("name", name)
-                put("mimeType", mimeType)
-                put("size", size)
-                put("checksum", checksum)
-                if (startOffset > 0) {
-                    put("startOffset", startOffset)
+            val json =
+                JSONObject().apply {
+                    put("fileIndex", fileIndex)
+                    put("totalFiles", totalFiles)
+                    put("fileId", fileId)
+                    put("name", name)
+                    put("mimeType", mimeType)
+                    put("size", size)
+                    put("checksum", checksum)
+                    if (startOffset > 0) {
+                        put("startOffset", startOffset)
+                    }
                 }
-            }
             writeJson(output, TYPE_FILE_START, json)
         }
     }
@@ -453,7 +500,7 @@ sealed class ProtocolMessage {
         val fileId: String,
         val sequence: Long,
         val offset: Long,
-        val payload: ByteArray
+        val payload: ByteArray,
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
             val dos = DataOutputStream(output)
@@ -475,40 +522,43 @@ sealed class ProtocolMessage {
     data class ChunkAck(
         val fileId: String,
         val sequence: Long,
-        val bytesReceived: Long
+        val bytesReceived: Long,
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("fileId", fileId)
-                put("sequence", sequence)
-                put("bytesReceived", bytesReceived)
-            }
+            val json =
+                JSONObject().apply {
+                    put("fileId", fileId)
+                    put("sequence", sequence)
+                    put("bytesReceived", bytesReceived)
+                }
             writeJson(output, TYPE_CHUNK_ACK, json)
         }
     }
 
     data class FileComplete(
         val fileId: String,
-        val checksum: String
+        val checksum: String,
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("fileId", fileId)
-                put("checksum", checksum)
-            }
+            val json =
+                JSONObject().apply {
+                    put("fileId", fileId)
+                    put("checksum", checksum)
+                }
             writeJson(output, TYPE_FILE_COMPLETE, json)
         }
     }
 
     data class FileVerifyAck(
         val fileId: String,
-        val success: Boolean
+        val success: Boolean,
     ) : ProtocolMessage() {
         override fun writeToStream(output: OutputStream) {
-            val json = JSONObject().apply {
-                put("fileId", fileId)
-                put("success", success)
-            }
+            val json =
+                JSONObject().apply {
+                    put("fileId", fileId)
+                    put("success", success)
+                }
             writeJson(output, TYPE_FILE_VERIFY_ACK, json)
         }
     }
@@ -534,7 +584,11 @@ sealed class ProtocolMessage {
     }
 }
 
-private fun writeJson(output: OutputStream, type: Byte, json: JSONObject) {
+private fun writeJson(
+    output: OutputStream,
+    type: Byte,
+    json: JSONObject,
+) {
     val dos = DataOutputStream(output)
     val bytes = json.toString().toByteArray(Charsets.UTF_8)
     dos.writeInt(ProtocolMessage.MAGIC_NUMBER)
@@ -544,7 +598,10 @@ private fun writeJson(output: OutputStream, type: Byte, json: JSONObject) {
     dos.flush()
 }
 
-private fun writeEmpty(output: OutputStream, type: Byte) {
+private fun writeEmpty(
+    output: OutputStream,
+    type: Byte,
+) {
     val dos = DataOutputStream(output)
     dos.writeInt(ProtocolMessage.MAGIC_NUMBER)
     dos.writeByte(type.toInt())

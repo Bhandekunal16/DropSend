@@ -32,7 +32,6 @@ import org.robolectric.shadows.ShadowNetwork
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class HotspotAutoConnectorTest {
-
     private lateinit var context: Context
     private lateinit var connectivityManager: ConnectivityManager
     private lateinit var connector: HotspotAutoConnector
@@ -154,147 +153,160 @@ class HotspotAutoConnectorTest {
     // ==========================================
 
     @Test
-    fun `test direct IP connection succeeds immediately without network request`() = runTest {
-        val params = QrConnectionParams(
-            ssid = "",
-            passphrase = "",
-            ipAddress = "192.168.43.1",
-            port = 8888
-        )
+    fun `test direct IP connection succeeds immediately without network request`() =
+        runTest {
+            val params =
+                QrConnectionParams(
+                    ssid = "",
+                    passphrase = "",
+                    ipAddress = "192.168.43.1",
+                    port = 8888,
+                )
 
-        var statusReceived = ""
-        val result = connector.connectToHotspotNetwork(params) { status ->
-            statusReceived = status
+            var statusReceived = ""
+            val result =
+                connector.connectToHotspotNetwork(params) { status ->
+                    statusReceived = status
+                }
+
+            assertTrue(result)
+            assertTrue(statusReceived.contains("192.168.43.1:8888"))
+            assertNull(connector.activeCallback)
         }
 
-        assertTrue(result)
-        assertTrue(statusReceived.contains("192.168.43.1:8888"))
-        assertNull(connector.activeCallback)
-    }
-
     @Test
-    fun `test successful hotspot connection when onAvailable fires`() = runTest {
-        val params = QrConnectionParams(
-            ssid = "DropSend-Receiver",
-            passphrase = "password123",
-            ipAddress = "192.168.43.1"
-        )
+    fun `test successful hotspot connection when onAvailable fires`() =
+        runTest {
+            val params =
+                QrConnectionParams(
+                    ssid = "DropSend-Receiver",
+                    passphrase = "password123",
+                    ipAddress = "192.168.43.1",
+                )
 
-        val statuses = mutableListOf<String>()
-        val connectionJob = async {
-            connector.connectToHotspotNetwork(params) { statuses.add(it) }
+            val statuses = mutableListOf<String>()
+            val connectionJob =
+                async {
+                    connector.connectToHotspotNetwork(params) { statuses.add(it) }
+                }
+
+            runCurrent()
+            assertNotNull(connector.activeCallback)
+            assertEquals("Connecting to Receiver's Hotspot: DropSend-Receiver...", statuses.first())
+
+            // Simulate Android OS firing onAvailable
+            val network = ShadowNetwork.newInstance(1234)
+            connector.activeCallback?.onAvailable(network)
+            runCurrent()
+
+            val result = connectionJob.await()
+            assertTrue(result)
+            assertTrue(connector.isProcessNetworkBound)
+            assertTrue(statuses.last().contains("Connected to hotspot"))
+
+            // Cleanup
+            connector.release()
+            assertFalse(connector.isProcessNetworkBound)
+            assertNull(connector.activeCallback)
         }
 
-        runCurrent()
-        assertNotNull(connector.activeCallback)
-        assertEquals("Connecting to Receiver's Hotspot: DropSend-Receiver...", statuses.first())
-
-        // Simulate Android OS firing onAvailable
-        val network = ShadowNetwork.newInstance(1234)
-        connector.activeCallback?.onAvailable(network)
-        runCurrent()
-
-        val result = connectionJob.await()
-        assertTrue(result)
-        assertTrue(connector.isProcessNetworkBound)
-        assertTrue(statuses.last().contains("Connected to hotspot"))
-
-        // Cleanup
-        connector.release()
-        assertFalse(connector.isProcessNetworkBound)
-        assertNull(connector.activeCallback)
-    }
-
     @Test
-    fun `test hotspot unavailable returns false immediately`() = runTest {
-        val params = QrConnectionParams(
-            ssid = "Unavailable-Hotspot",
-            passphrase = "password123",
-            ipAddress = "192.168.43.1"
-        )
+    fun `test hotspot unavailable returns false immediately`() =
+        runTest {
+            val params =
+                QrConnectionParams(
+                    ssid = "Unavailable-Hotspot",
+                    passphrase = "password123",
+                    ipAddress = "192.168.43.1",
+                )
 
-        val connectionJob = async {
-            connector.connectToHotspotNetwork(params)
+            val connectionJob =
+                async {
+                    connector.connectToHotspotNetwork(params)
+                }
+
+            runCurrent()
+            val callback = connector.activeCallback
+            assertNotNull(callback)
+
+            // Simulate onUnavailable
+            callback?.onUnavailable()
+            runCurrent()
+
+            val result = connectionJob.await()
+            assertFalse(result)
+            assertFalse(connector.isProcessNetworkBound)
         }
 
-        runCurrent()
-        val callback = connector.activeCallback
-        assertNotNull(callback)
-
-        // Simulate onUnavailable
-        callback?.onUnavailable()
-        runCurrent()
-
-        val result = connectionJob.await()
-        assertFalse(result)
-        assertFalse(connector.isProcessNetworkBound)
-    }
-
     @Test
-    fun `test stale callback from earlier attempt is safely ignored`() = runTest {
-        val params1 = QrConnectionParams(ssid = "Hotspot-1", passphrase = "pass1", ipAddress = "192.168.43.1")
-        val params2 = QrConnectionParams(ssid = "Hotspot-2", passphrase = "pass2", ipAddress = "192.168.43.2")
+    fun `test stale callback from earlier attempt is safely ignored`() =
+        runTest {
+            val params1 = QrConnectionParams(ssid = "Hotspot-1", passphrase = "pass1", ipAddress = "192.168.43.1")
+            val params2 = QrConnectionParams(ssid = "Hotspot-2", passphrase = "pass2", ipAddress = "192.168.43.2")
 
-        val job1 = async { connector.connectToHotspotNetwork(params1) }
-        runCurrent()
-        val callback1 = connector.activeCallback
-        assertNotNull(callback1)
-        val attempt1Id = connector.currentAttempt
+            val job1 = async { connector.connectToHotspotNetwork(params1) }
+            runCurrent()
+            val callback1 = connector.activeCallback
+            assertNotNull(callback1)
+            val attempt1Id = connector.currentAttempt
 
-        // Start second attempt, which supersedes the first
-        val job2 = async { connector.connectToHotspotNetwork(params2) }
-        runCurrent()
-        val callback2 = connector.activeCallback
-        assertNotNull(callback2)
-        val attempt2Id = connector.currentAttempt
+            // Start second attempt, which supersedes the first
+            val job2 = async { connector.connectToHotspotNetwork(params2) }
+            runCurrent()
+            val callback2 = connector.activeCallback
+            assertNotNull(callback2)
+            val attempt2Id = connector.currentAttempt
 
-        assertTrue(attempt2Id > attempt1Id)
+            assertTrue(attempt2Id > attempt1Id)
 
-        // First job should be resumed with false because it was superseded
-        val result1 = job1.await()
-        assertFalse(result1)
+            // First job should be resumed with false because it was superseded
+            val result1 = job1.await()
+            assertFalse(result1)
 
-        // Stale callback1 fires onAvailable; should be discarded and not bind process
-        val network1 = ShadowNetwork.newInstance(1001)
-        callback1?.onAvailable(network1)
-        runCurrent()
+            // Stale callback1 fires onAvailable; should be discarded and not bind process
+            val network1 = ShadowNetwork.newInstance(1001)
+            callback1?.onAvailable(network1)
+            runCurrent()
 
-        // Active callback2 fires onAvailable
-        val network2 = ShadowNetwork.newInstance(1002)
-        callback2?.onAvailable(network2)
-        runCurrent()
+            // Active callback2 fires onAvailable
+            val network2 = ShadowNetwork.newInstance(1002)
+            callback2?.onAvailable(network2)
+            runCurrent()
 
-        val result2 = job2.await()
-        assertTrue(result2)
-        assertTrue(connector.isProcessNetworkBound)
+            val result2 = job2.await()
+            assertTrue(result2)
+            assertTrue(connector.isProcessNetworkBound)
 
-        connector.release()
-    }
-
-    @Test
-    fun `test release during active connection cancels and cleans up`() = runTest {
-        val params = QrConnectionParams(
-            ssid = "DropSend-AP",
-            passphrase = "password123",
-            ipAddress = "192.168.43.1"
-        )
-
-        val connectionJob = async {
-            connector.connectToHotspotNetwork(params)
+            connector.release()
         }
 
-        runCurrent()
-        assertNotNull(connector.activeCallback)
+    @Test
+    fun `test release during active connection cancels and cleans up`() =
+        runTest {
+            val params =
+                QrConnectionParams(
+                    ssid = "DropSend-AP",
+                    passphrase = "password123",
+                    ipAddress = "192.168.43.1",
+                )
 
-        // User or ViewModel calls release() while waiting
-        connector.release()
-        runCurrent()
+            val connectionJob =
+                async {
+                    connector.connectToHotspotNetwork(params)
+                }
 
-        val result = connectionJob.await()
-        assertFalse(result)
-        assertNull(connector.activeCallback)
-        assertFalse(connector.isProcessNetworkBound)
-    }
+            runCurrent()
+            assertNotNull(connector.activeCallback)
+
+            // User or ViewModel calls release() while waiting
+            connector.release()
+            runCurrent()
+
+            val result = connectionJob.await()
+            assertFalse(result)
+            assertNull(connector.activeCallback)
+            assertFalse(connector.isProcessNetworkBound)
+        }
 
     @Test
     fun `test release is idempotent`() {
@@ -306,48 +318,54 @@ class HotspotAutoConnectorTest {
     }
 
     @Test
-    fun `test coroutine cancellation cleans up callback and process binding`() = runTest {
-        val params = QrConnectionParams(
-            ssid = "DropSend-AP",
-            passphrase = "password123",
-            ipAddress = "192.168.43.1"
-        )
+    fun `test coroutine cancellation cleans up callback and process binding`() =
+        runTest {
+            val params =
+                QrConnectionParams(
+                    ssid = "DropSend-AP",
+                    passphrase = "password123",
+                    ipAddress = "192.168.43.1",
+                )
 
-        val job = launch {
-            connector.connectToHotspotNetwork(params)
+            val job =
+                launch {
+                    connector.connectToHotspotNetwork(params)
+                }
+
+            runCurrent()
+            assertNotNull(connector.activeCallback)
+
+            job.cancelAndJoin()
+
+            assertNull(connector.activeCallback)
+            assertFalse(connector.isProcessNetworkBound)
         }
-
-        runCurrent()
-        assertNotNull(connector.activeCallback)
-
-        job.cancelAndJoin()
-
-        assertNull(connector.activeCallback)
-        assertFalse(connector.isProcessNetworkBound)
-    }
 
     @Test
-    fun `test connection timeout cleans up after 15 seconds`() = runTest {
-        val params = QrConnectionParams(
-            ssid = "DropSend-NonExistent",
-            passphrase = "password123",
-            ipAddress = "192.168.43.1"
-        )
+    fun `test connection timeout cleans up after 15 seconds`() =
+        runTest {
+            val params =
+                QrConnectionParams(
+                    ssid = "DropSend-NonExistent",
+                    passphrase = "password123",
+                    ipAddress = "192.168.43.1",
+                )
 
-        val connectionJob = async {
-            connector.connectToHotspotNetwork(params)
+            val connectionJob =
+                async {
+                    connector.connectToHotspotNetwork(params)
+                }
+
+            runCurrent()
+            assertNotNull(connector.activeCallback)
+
+            // Advance virtual time past 15000ms
+            advanceTimeBy(15001)
+            runCurrent()
+
+            val result = connectionJob.await()
+            assertFalse(result)
+            assertNull(connector.activeCallback)
+            assertFalse(connector.isProcessNetworkBound)
         }
-
-        runCurrent()
-        assertNotNull(connector.activeCallback)
-
-        // Advance virtual time past 15000ms
-        advanceTimeBy(15001)
-        runCurrent()
-
-        val result = connectionJob.await()
-        assertFalse(result)
-        assertNull(connector.activeCallback)
-        assertFalse(connector.isProcessNetworkBound)
-    }
 }

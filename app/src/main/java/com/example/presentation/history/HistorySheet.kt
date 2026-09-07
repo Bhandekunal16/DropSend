@@ -65,62 +65,66 @@ fun HistorySheet(
     onDismiss: () -> Unit,
     onClearHistory: () -> Unit,
     onDeleteItem: (Long) -> Unit,
-    onOpenFile: (TransferHistoryEntity) -> Unit = {}
+    onOpenFile: (TransferHistoryEntity) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var filterType by remember { mutableStateOf("ALL") }
     var showClearDialog by remember { mutableStateOf(false) }
 
-    val filteredList = remember(historyList, filterType) {
-        when (filterType) {
-            "SENT" -> historyList.filter { it.isSending }
-            "RECEIVED" -> historyList.filter { !it.isSending }
-            "FAILED" -> historyList.filter { it.status == "FAILED" }
-            else -> historyList
+    val filteredList =
+        remember(historyList, filterType) {
+            when (filterType) {
+                "SENT" -> historyList.filter { it.isSending }
+                "RECEIVED" -> historyList.filter { !it.isSending }
+                "FAILED" -> historyList.filter { it.status == "FAILED" }
+                else -> historyList
+            }
         }
-    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.testTag("history_bottom_sheet")
+        modifier = Modifier.testTag("history_bottom_sheet"),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 8.dp)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
         ) {
             // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = Icons.Default.History,
                             contentDescription = "History",
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                     Text(
                         text = "Transfer History",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        )
+                        style =
+                            MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp,
+                            ),
                     )
                 }
 
@@ -128,12 +132,12 @@ fun HistorySheet(
                     if (historyList.isNotEmpty()) {
                         IconButton(
                             onClick = { showClearDialog = true },
-                            modifier = Modifier.testTag("clear_history_button")
+                            modifier = Modifier.testTag("clear_history_button"),
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DeleteSweep,
                                 contentDescription = "Clear All History",
-                                tint = MaterialTheme.colorScheme.error
+                                tint = MaterialTheme.colorScheme.error,
                             )
                         }
                     }
@@ -141,7 +145,7 @@ fun HistorySheet(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -152,27 +156,27 @@ fun HistorySheet(
             // Filter Chips
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 FilterChip(
                     selected = filterType == "ALL",
                     onClick = { filterType = "ALL" },
-                    label = { Text("All (${historyList.size})") }
+                    label = { Text("All (${historyList.size})") },
                 )
                 FilterChip(
                     selected = filterType == "SENT",
                     onClick = { filterType = "SENT" },
-                    label = { Text("Sent") }
+                    label = { Text("Sent") },
                 )
                 FilterChip(
                     selected = filterType == "RECEIVED",
                     onClick = { filterType = "RECEIVED" },
-                    label = { Text("Received") }
+                    label = { Text("Received") },
                 )
                 FilterChip(
                     selected = filterType == "FAILED",
                     onClick = { filterType = "FAILED" },
-                    label = { Text("Failed") }
+                    label = { Text("Failed") },
                 )
             }
 
@@ -180,29 +184,31 @@ fun HistorySheet(
 
             if (filteredList.isEmpty()) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = if (historyList.isEmpty()) "No transfer records yet" else "No matching transfers",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(380.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(380.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(filteredList, key = { it.id }) { item ->
                         HistoryItemCard(
                             item = item,
                             onDelete = { onDeleteItem(item.id) },
-                            onOpen = { onOpenFile(item) }
+                            onOpen = { onOpenFile(item) },
                         )
                     }
                     item {
@@ -223,7 +229,7 @@ fun HistorySheet(
                     onClick = {
                         onClearHistory()
                         showClearDialog = false
-                    }
+                    },
                 ) {
                     Text("Clear All", color = MaterialTheme.colorScheme.error)
                 }
@@ -232,7 +238,7 @@ fun HistorySheet(
                 TextButton(onClick = { showClearDialog = false }) {
                     Text("Cancel")
                 }
-            }
+            },
         )
     }
 }
@@ -241,49 +247,60 @@ fun HistorySheet(
 private fun HistoryItemCard(
     item: TransferHistoryEntity,
     onDelete: () -> Unit,
-    onOpen: () -> Unit
+    onOpen: () -> Unit,
 ) {
     val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
     val timeString = remember(item.timestamp) { dateFormat.format(Date(item.timestamp)) }
 
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onOpen() }
-            .testTag("history_item_${item.id}")
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable { onOpen() }
+                .testTag("history_item_${item.id}"),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (item.status == "COMPLETED") MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.errorContainer
-                        ),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (item.status == "COMPLETED") {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.errorContainer
+                                },
+                            ),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = if (item.isSending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                         contentDescription = if (item.isSending) "Sent" else "Received",
-                        tint = if (item.status == "COMPLETED") MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.size(20.dp)
+                        tint =
+                            if (item.status == "COMPLETED") {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onErrorContainer
+                            },
+                        modifier = Modifier.size(20.dp),
                     )
                 }
 
@@ -293,28 +310,30 @@ private fun HistoryItemCard(
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "${formatFileSize(item.sizeBytes)} • ${if (item.isSending) "To " + item.peerName else "From " + item.peerName} • $timeString",
+                        text = "${formatFileSize(
+                            item.sizeBytes,
+                        )} • ${if (item.isSending) "To " + item.peerName else "From " + item.peerName} • $timeString",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
 
             IconButton(
                 onClick = onDelete,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(48.dp),
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Delete entry",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(18.dp),
                 )
             }
         }

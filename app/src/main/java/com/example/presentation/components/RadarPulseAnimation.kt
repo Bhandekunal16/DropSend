@@ -30,53 +30,56 @@ import com.example.ui.theme.DropCyan
 @Composable
 fun RadarPulseAnimation(
     modifier: Modifier = Modifier,
-    centerIconColor: Color = DropCyan
+    centerIconColor: Color = DropCyan,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "radar_transition")
 
     val pulse1 by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulse1"
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(2200, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+        label = "pulse1",
     )
 
     val pulse2 by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, delayMillis = 750, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulse2"
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(2200, delayMillis = 750, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+        label = "pulse2",
     )
 
     val pulse3 by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, delayMillis = 1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulse3"
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(2200, delayMillis = 1500, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+        label = "pulse3",
     )
 
     Box(
         modifier = modifier,
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val maxRadius = size.minDimension / 2f
-            
+
             // Outer ring 1
             if (pulse1 > 0f) {
                 drawCircle(
                     color = centerIconColor.copy(alpha = (1f - pulse1) * 0.45f),
                     radius = maxRadius * pulse1,
-                    style = Stroke(width = 2.5.dp.toPx())
+                    style = Stroke(width = 2.5.dp.toPx()),
                 )
             }
 
@@ -85,7 +88,7 @@ fun RadarPulseAnimation(
                 drawCircle(
                     color = centerIconColor.copy(alpha = (1f - pulse2) * 0.45f),
                     radius = maxRadius * pulse2,
-                    style = Stroke(width = 2.dp.toPx())
+                    style = Stroke(width = 2.dp.toPx()),
                 )
             }
 
@@ -94,31 +97,33 @@ fun RadarPulseAnimation(
                 drawCircle(
                     color = centerIconColor.copy(alpha = (1f - pulse3) * 0.45f),
                     radius = maxRadius * pulse3,
-                    style = Stroke(width = 1.5.dp.toPx())
+                    style = Stroke(width = 1.5.dp.toPx()),
                 )
             }
         }
 
         // Center glowing node
         Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(centerIconColor.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(centerIconColor.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center,
         ) {
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(centerIconColor.copy(alpha = 0.3f)),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(centerIconColor.copy(alpha = 0.3f)),
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Default.Sensors,
                     contentDescription = "Radar beacon",
                     tint = centerIconColor,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(28.dp),
                 )
             }
         }

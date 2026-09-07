@@ -18,7 +18,6 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class LanDiscoveryServiceTest {
-
     private lateinit var context: Context
     private lateinit var lanDiscovery: LanDiscoveryService
 
@@ -37,26 +36,28 @@ class LanDiscoveryServiceTest {
     }
 
     @Test
-    fun testStartAndStopDiscoveryIdempotency() = runTest {
-        lanDiscovery.startDiscovery("LOCAL_DEVICE_1")
-        // Rapid second start with same ID should be clean
-        lanDiscovery.startDiscovery("LOCAL_DEVICE_1")
+    fun testStartAndStopDiscoveryIdempotency() =
+        runTest {
+            lanDiscovery.startDiscovery("LOCAL_DEVICE_1")
+            // Rapid second start with same ID should be clean
+            lanDiscovery.startDiscovery("LOCAL_DEVICE_1")
 
-        lanDiscovery.stopDiscovery()
-        // Redundant stop should not throw
-        lanDiscovery.stopDiscovery()
+            lanDiscovery.stopDiscovery()
+            // Redundant stop should not throw
+            lanDiscovery.stopDiscovery()
 
-        assertEquals(0, lanDiscovery.discoveredDevices.value.size)
-    }
+            assertEquals(0, lanDiscovery.discoveredDevices.value.size)
+        }
 
     @Test
-    fun testStartAndStopAdvertisingIdempotency() = runTest {
-        lanDiscovery.startAdvertising("LOCAL_DEVICE_1", "Test Device", LanDiscoveryService.DEFAULT_TCP_PORT)
-        lanDiscovery.startAdvertising("LOCAL_DEVICE_1", "Test Device", LanDiscoveryService.DEFAULT_TCP_PORT)
+    fun testStartAndStopAdvertisingIdempotency() =
+        runTest {
+            lanDiscovery.startAdvertising("LOCAL_DEVICE_1", "Test Device", LanDiscoveryService.DEFAULT_TCP_PORT)
+            lanDiscovery.startAdvertising("LOCAL_DEVICE_1", "Test Device", LanDiscoveryService.DEFAULT_TCP_PORT)
 
-        lanDiscovery.stopAdvertising()
-        lanDiscovery.stopAdvertising()
-    }
+            lanDiscovery.stopAdvertising()
+            lanDiscovery.stopAdvertising()
+        }
 
     @Test
     fun testClearDevices() {

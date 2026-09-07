@@ -80,7 +80,7 @@ data class ConnectionVisualState(
     val dotColor: Color,
     val icon: ImageVector,
     val isPulsing: Boolean = false,
-    val tagKey: String
+    val tagKey: String,
 )
 
 /**
@@ -95,11 +95,12 @@ fun resolveConnectionVisualState(
     transportType: TransportType?,
     isWifiOn: Boolean,
     isBluetoothOn: Boolean,
-    isHotspotActive: Boolean
+    isHotspotActive: Boolean,
 ): ConnectionVisualState {
-    val activeDeviceName = targetDeviceName?.ifBlank { null }
-        ?: incomingSenderName?.ifBlank { null }
-        ?: "Nearby Device"
+    val activeDeviceName =
+        targetDeviceName?.ifBlank { null }
+            ?: incomingSenderName?.ifBlank { null }
+            ?: "Nearby Device"
 
     return when (sessionState) {
         SessionState.TRANSFERRING, SessionState.VERIFYING -> {
@@ -112,7 +113,7 @@ fun resolveConnectionVisualState(
                 dotColor = SleekGreen,
                 icon = Icons.Default.Link,
                 isPulsing = true,
-                tagKey = "connected"
+                tagKey = "connected",
             )
         }
 
@@ -125,7 +126,7 @@ fun resolveConnectionVisualState(
                 dotColor = SleekSky,
                 icon = Icons.Default.Sync,
                 isPulsing = true,
-                tagKey = "connecting"
+                tagKey = "connecting",
             )
         }
 
@@ -139,7 +140,7 @@ fun resolveConnectionVisualState(
                     dotColor = MaterialTheme.colorScheme.primary,
                     icon = Icons.Default.PhoneAndroid,
                     isPulsing = true,
-                    tagKey = "waiting_receive"
+                    tagKey = "waiting_receive",
                 )
             } else {
                 ConnectionVisualState(
@@ -150,7 +151,7 @@ fun resolveConnectionVisualState(
                     dotColor = DropAmber,
                     icon = Icons.Default.HourglassEmpty,
                     isPulsing = true,
-                    tagKey = "waiting_send"
+                    tagKey = "waiting_send",
                 )
             }
         }
@@ -164,7 +165,7 @@ fun resolveConnectionVisualState(
                 dotColor = DropAmber,
                 icon = Icons.Default.Sensors,
                 isPulsing = true,
-                tagKey = "searching"
+                tagKey = "searching",
             )
         }
 
@@ -177,7 +178,7 @@ fun resolveConnectionVisualState(
                 dotColor = SleekPrimary,
                 icon = Icons.Default.Devices,
                 isPulsing = false,
-                tagKey = "device_found"
+                tagKey = "device_found",
             )
         }
 
@@ -190,7 +191,7 @@ fun resolveConnectionVisualState(
                 dotColor = SleekGreen,
                 icon = Icons.Default.DoneAll,
                 isPulsing = false,
-                tagKey = "completed"
+                tagKey = "completed",
             )
         }
 
@@ -204,7 +205,7 @@ fun resolveConnectionVisualState(
                 dotColor = SleekRed,
                 icon = Icons.Default.ErrorOutline,
                 isPulsing = false,
-                tagKey = "failed"
+                tagKey = "failed",
             )
         }
 
@@ -218,7 +219,7 @@ fun resolveConnectionVisualState(
                     dotColor = SleekRed,
                     icon = Icons.Default.WifiOff,
                     isPulsing = false,
-                    tagKey = "disconnected_offline"
+                    tagKey = "disconnected_offline",
                 )
             } else {
                 ConnectionVisualState(
@@ -229,7 +230,7 @@ fun resolveConnectionVisualState(
                     dotColor = MaterialTheme.colorScheme.outline,
                     icon = Icons.Default.Wifi,
                     isPulsing = false,
-                    tagKey = "disconnected_ready"
+                    tagKey = "disconnected_ready",
                 )
             }
         }
@@ -251,45 +252,48 @@ fun RealtimeConnectionStatusBar(
     isBluetoothOn: Boolean = true,
     isHotspotActive: Boolean = false,
     showRadioPills: Boolean = true,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val visualState = resolveConnectionVisualState(
-        sessionState = sessionState,
-        targetDeviceName = targetDeviceName,
-        incomingSenderName = incomingSenderName,
-        role = role,
-        transportType = transportType,
-        isWifiOn = isWifiOn,
-        isBluetoothOn = isBluetoothOn,
-        isHotspotActive = isHotspotActive
-    )
+    val visualState =
+        resolveConnectionVisualState(
+            sessionState = sessionState,
+            targetDeviceName = targetDeviceName,
+            incomingSenderName = incomingSenderName,
+            role = role,
+            transportType = transportType,
+            isWifiOn = isWifiOn,
+            isBluetoothOn = isBluetoothOn,
+            isHotspotActive = isHotspotActive,
+        )
 
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .testTag("connection_status_bar"),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .testTag("connection_status_bar"),
         color = MaterialTheme.colorScheme.background,
-        tonalElevation = 1.dp
+        tonalElevation = 1.dp,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 // Main Color-Coded Connection Chip with Animated Transition
                 AnimatedContent(
                     targetState = visualState,
                     transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
                     label = "connection_chip_anim",
-                    modifier = Modifier.weight(1f, fill = false)
+                    modifier = Modifier.weight(1f, fill = false),
                 ) { targetVisual ->
                     ConnectionStateChip(
                         visualState = targetVisual,
-                        modifier = Modifier.testTag("connection_state_chip")
+                        modifier = Modifier.testTag("connection_state_chip"),
                     )
                 }
 
@@ -298,14 +302,14 @@ fun RealtimeConnectionStatusBar(
                     // Auxiliary Glanceable Radio Indicators
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         if (isHotspotActive) {
                             RadioBadge(
                                 icon = Icons.Default.WifiTethering,
                                 label = "AP",
                                 isActive = true,
-                                activeColor = SleekSky
+                                activeColor = SleekSky,
                             )
                         }
 
@@ -313,24 +317,25 @@ fun RealtimeConnectionStatusBar(
                             icon = if (isWifiOn) Icons.Default.Wifi else Icons.Default.WifiOff,
                             label = "Wi-Fi",
                             isActive = isWifiOn,
-                            activeColor = SleekGreen
+                            activeColor = SleekGreen,
                         )
 
                         RadioBadge(
                             icon = if (isBluetoothOn) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled,
                             label = "BT",
                             isActive = isBluetoothOn,
-                            activeColor = SleekSky
+                            activeColor = SleekSky,
                         )
                     }
                 }
             }
 
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(0.5.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(0.5.dp)
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
             )
         }
     }
@@ -342,39 +347,42 @@ fun RealtimeConnectionStatusBar(
 @Composable
 fun ConnectionStateChip(
     visualState: ConnectionVisualState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse_anim")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.85f,
         targetValue = 1.25f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "dot_pulse"
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(900, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+        label = "dot_pulse",
     )
 
     val animatedBorderColor by animateColorAsState(
         targetValue = visualState.dotColor.copy(alpha = 0.35f),
-        label = "border_color"
+        label = "border_color",
     )
 
     Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(22.dp))
-            .background(visualState.containerColor)
-            .border(1.dp, animatedBorderColor, RoundedCornerShape(22.dp))
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(22.dp))
+                .background(visualState.containerColor)
+                .border(1.dp, animatedBorderColor, RoundedCornerShape(22.dp))
+                .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         // Status Indicator Dot
         Box(
-            modifier = Modifier
-                .size(8.dp)
-                .scale(if (visualState.isPulsing) pulseScale else 1f)
-                .clip(CircleShape)
-                .background(visualState.dotColor)
+            modifier =
+                Modifier
+                    .size(8.dp)
+                    .scale(if (visualState.isPulsing) pulseScale else 1f)
+                    .clip(CircleShape)
+                    .background(visualState.dotColor),
         )
 
         Spacer(modifier = Modifier.width(8.dp))
@@ -384,7 +392,7 @@ fun ConnectionStateChip(
             imageVector = visualState.icon,
             contentDescription = null,
             tint = visualState.contentColor,
-            modifier = Modifier.size(15.dp)
+            modifier = Modifier.size(15.dp),
         )
 
         Spacer(modifier = Modifier.width(8.dp))
@@ -392,7 +400,7 @@ fun ConnectionStateChip(
         // Single-line Title and Subtitle with clean breathing room
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
                 text = visualState.title,
@@ -400,15 +408,16 @@ fun ConnectionStateChip(
                 fontWeight = FontWeight.Bold,
                 color = visualState.contentColor,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
 
             if (!visualState.subtitle.isNullOrBlank()) {
                 Box(
-                    modifier = Modifier
-                        .size(3.dp)
-                        .clip(CircleShape)
-                        .background(visualState.contentColor.copy(alpha = 0.5f))
+                    modifier =
+                        Modifier
+                            .size(3.dp)
+                            .clip(CircleShape)
+                            .background(visualState.contentColor.copy(alpha = 0.5f)),
                 )
                 Text(
                     text = visualState.subtitle,
@@ -416,7 +425,7 @@ fun ConnectionStateChip(
                     fontWeight = FontWeight.Medium,
                     color = visualState.contentColor.copy(alpha = 0.85f),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -432,30 +441,31 @@ private fun RadioBadge(
     label: String,
     isActive: Boolean,
     activeColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val bgColor = if (isActive) activeColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     val contentColor = if (isActive) activeColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
 
     Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(bgColor)
-            .padding(horizontal = 9.dp, vertical = 6.dp),
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(14.dp))
+                .background(bgColor)
+                .padding(horizontal = 9.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = contentColor,
-            modifier = Modifier.size(13.dp)
+            modifier = Modifier.size(13.dp),
         )
         Text(
             text = label,
             fontSize = 10.5.sp,
             fontWeight = FontWeight.SemiBold,
-            color = contentColor
+            color = contentColor,
         )
     }
 }

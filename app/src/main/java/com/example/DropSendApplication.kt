@@ -12,7 +12,6 @@ import com.example.data.storage.StorageManager
 import com.example.data.storage.ThemePreferences
 
 class DropSendApplication : Application() {
-
     lateinit var storageManager: StorageManager
         private set
 

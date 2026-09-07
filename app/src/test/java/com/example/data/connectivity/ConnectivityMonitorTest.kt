@@ -23,7 +23,6 @@ import org.robolectric.shadows.ShadowLooper
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class ConnectivityMonitorTest {
-
     private lateinit var context: Context
     private lateinit var connectivityMonitor: ConnectivityMonitor
     private lateinit var wifiManager: WifiManager
@@ -42,18 +41,20 @@ class ConnectivityMonitorTest {
         connectivityMonitor.startMonitoring()
 
         // Simulate Bluetooth ON broadcast
-        val intentOn = Intent(BluetoothAdapter.ACTION_STATE_CHANGED).apply {
-            putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_ON)
-        }
+        val intentOn =
+            Intent(BluetoothAdapter.ACTION_STATE_CHANGED).apply {
+                putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_ON)
+            }
         context.sendBroadcast(intentOn)
         ShadowLooper.idleMainLooper()
         assertTrue(connectivityMonitor.state.value.isBluetoothOn)
         assertTrue(connectivityMonitor.isBluetoothEnabled())
 
         // Simulate Bluetooth OFF broadcast
-        val intentOff = Intent(BluetoothAdapter.ACTION_STATE_CHANGED).apply {
-            putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF)
-        }
+        val intentOff =
+            Intent(BluetoothAdapter.ACTION_STATE_CHANGED).apply {
+                putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF)
+            }
         context.sendBroadcast(intentOff)
         ShadowLooper.idleMainLooper()
         assertFalse(connectivityMonitor.state.value.isBluetoothOn)
@@ -69,17 +70,19 @@ class ConnectivityMonitorTest {
         val shadowWifi = Shadows.shadowOf(wifiManager)
         shadowWifi.setWifiState(WifiManager.WIFI_STATE_ENABLED)
 
-        val intentOn = Intent(WifiManager.WIFI_STATE_CHANGED_ACTION).apply {
-            putExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_ENABLED)
-        }
+        val intentOn =
+            Intent(WifiManager.WIFI_STATE_CHANGED_ACTION).apply {
+                putExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_ENABLED)
+            }
         context.sendBroadcast(intentOn)
         ShadowLooper.idleMainLooper()
         assertTrue(connectivityMonitor.isWifiEnabled())
 
         shadowWifi.setWifiState(WifiManager.WIFI_STATE_DISABLED)
-        val intentOff = Intent(WifiManager.WIFI_STATE_CHANGED_ACTION).apply {
-            putExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_DISABLED)
-        }
+        val intentOff =
+            Intent(WifiManager.WIFI_STATE_CHANGED_ACTION).apply {
+                putExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_DISABLED)
+            }
         context.sendBroadcast(intentOff)
         ShadowLooper.idleMainLooper()
         assertFalse(connectivityMonitor.isWifiEnabled())
@@ -160,9 +163,10 @@ class ConnectivityMonitorTest {
         shadowWifi.setWifiState(WifiManager.WIFI_STATE_DISABLED)
         connectivityMonitor.testIpLookup = { null }
 
-        val wifiLostIntent = Intent(WifiManager.WIFI_STATE_CHANGED_ACTION).apply {
-            putExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_DISABLED)
-        }
+        val wifiLostIntent =
+            Intent(WifiManager.WIFI_STATE_CHANGED_ACTION).apply {
+                putExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_DISABLED)
+            }
         context.sendBroadcast(wifiLostIntent)
         ShadowLooper.idleMainLooper()
 
@@ -172,9 +176,10 @@ class ConnectivityMonitorTest {
         // Reconnect
         shadowWifi.setWifiState(WifiManager.WIFI_STATE_ENABLED)
         connectivityMonitor.testIpLookup = { "192.168.1.99" }
-        val wifiReconnectedIntent = Intent(WifiManager.WIFI_STATE_CHANGED_ACTION).apply {
-            putExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_ENABLED)
-        }
+        val wifiReconnectedIntent =
+            Intent(WifiManager.WIFI_STATE_CHANGED_ACTION).apply {
+                putExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_ENABLED)
+            }
         context.sendBroadcast(wifiReconnectedIntent)
         ShadowLooper.idleMainLooper()
 
@@ -335,22 +340,23 @@ class ConnectivityMonitorTest {
         connectivityMonitor.startMonitoring()
 
         // AP Enabled broadcast
-        val apOnIntent = Intent("android.net.wifi.WIFI_AP_STATE_CHANGED").apply {
-            putExtra("wifi_state", 13) // WIFI_AP_STATE_ENABLED
-        }
+        val apOnIntent =
+            Intent("android.net.wifi.WIFI_AP_STATE_CHANGED").apply {
+                putExtra("wifi_state", 13) // WIFI_AP_STATE_ENABLED
+            }
         context.sendBroadcast(apOnIntent)
         ShadowLooper.idleMainLooper()
 
         assertTrue(connectivityMonitor.isWifiEnabled())
 
         // AP Disabled broadcast
-        val apOffIntent = Intent("android.net.wifi.WIFI_AP_STATE_CHANGED").apply {
-            putExtra("wifi_state", 14) // WIFI_AP_STATE_FAILED / DISABLED
-        }
+        val apOffIntent =
+            Intent("android.net.wifi.WIFI_AP_STATE_CHANGED").apply {
+                putExtra("wifi_state", 14) // WIFI_AP_STATE_FAILED / DISABLED
+            }
         context.sendBroadcast(apOffIntent)
         ShadowLooper.idleMainLooper()
 
         connectivityMonitor.stopMonitoring()
     }
 }
-

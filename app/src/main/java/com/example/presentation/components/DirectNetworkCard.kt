@@ -72,12 +72,12 @@ import kotlinx.coroutines.delay
  */
 enum class DirectNetworkStatus(
     val label: String,
-    val icon: ImageVector
+    val icon: ImageVector,
 ) {
     AVAILABLE("Ready for connection", Icons.Default.WifiTethering),
     STARTING("Preparing network…", Icons.Default.Sync),
     UNAVAILABLE("Network unavailable", Icons.Default.WifiOff),
-    ERROR("Unable to start network", Icons.Default.ErrorOutline)
+    ERROR("Unable to start network", Icons.Default.ErrorOutline),
 }
 
 /**
@@ -98,12 +98,16 @@ fun DirectNetworkCard(
     modifier: Modifier = Modifier,
     status: DirectNetworkStatus = if (ssid.isNotBlank()) DirectNetworkStatus.AVAILABLE else DirectNetworkStatus.STARTING,
     errorMessage: String? = null,
-    onCopyFeedback: ((String) -> Unit)? = null
+    onCopyFeedback: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var isPasswordVisible by remember { mutableStateOf(false) }
 
-    fun copyToClipboard(label: String, value: String, successMessage: String) {
+    fun copyToClipboard(
+        label: String,
+        value: String,
+        successMessage: String,
+    ) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         val clip = ClipData.newPlainText(label, value)
         clipboard?.setPrimaryClip(clip)
@@ -116,109 +120,133 @@ fun DirectNetworkCard(
     }
 
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .animateContentSize(animationSpec = tween(250))
-            .testTag("direct_network_card"),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .animateContentSize(animationSpec = tween(250))
+                .testTag("direct_network_card"),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-        ),
-        border = CardDefaults.outlinedCardBorder().copy(
-            brush = androidx.compose.ui.graphics.SolidColor(
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-            )
-        )
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            ),
+        border =
+            CardDefaults.outlinedCardBorder().copy(
+                brush =
+                    androidx.compose.ui.graphics.SolidColor(
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                    ),
+            ),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // 1. Header: Connection Type & Status Subtitle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = status.icon,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(20.dp),
                         )
                     }
 
                     Column {
                         Text(
                             text = "Direct Network",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.15.sp
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface
+                            style =
+                                MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.15.sp,
+                                ),
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
                             text = errorMessage ?: status.label,
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (status == DirectNetworkStatus.ERROR) {
-                                MaterialTheme.colorScheme.error
-                            } else if (status == DirectNetworkStatus.AVAILABLE) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                            color =
+                                if (status == DirectNetworkStatus.ERROR) {
+                                    MaterialTheme.colorScheme.error
+                                } else if (status == DirectNetworkStatus.AVAILABLE) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                         )
                     }
                 }
 
                 // Status Badge Pill
-                val (badgeBg, badgeFg) = when (status) {
-                    DirectNetworkStatus.AVAILABLE -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.primary
-                    DirectNetworkStatus.STARTING -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.secondary
-                    DirectNetworkStatus.UNAVAILABLE -> MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.onSurfaceVariant
-                    DirectNetworkStatus.ERROR -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.error
-                }
+                val (badgeBg, badgeFg) =
+                    when (status) {
+                        DirectNetworkStatus.AVAILABLE -> {
+                            MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.primary
+                        }
+
+                        DirectNetworkStatus.STARTING -> {
+                            MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.secondary
+                        }
+
+                        DirectNetworkStatus.UNAVAILABLE -> {
+                            MaterialTheme.colorScheme.surfaceContainerHighest to
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+
+                        DirectNetworkStatus.ERROR -> {
+                            MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.error
+                        }
+                    }
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = badgeBg,
-                    modifier = Modifier.semantics {
-                        contentDescription = "Direct network status: ${status.label}"
-                    }
+                    modifier =
+                        Modifier.semantics {
+                            contentDescription = "Direct network status: ${status.label}"
+                        },
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(badgeFg)
+                            modifier =
+                                Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(badgeFg),
                         )
                         Text(
-                            text = when (status) {
-                                DirectNetworkStatus.AVAILABLE -> "Active"
-                                DirectNetworkStatus.STARTING -> "Starting"
-                                DirectNetworkStatus.UNAVAILABLE -> "Off"
-                                DirectNetworkStatus.ERROR -> "Error"
-                            },
+                            text =
+                                when (status) {
+                                    DirectNetworkStatus.AVAILABLE -> "Active"
+                                    DirectNetworkStatus.STARTING -> "Starting"
+                                    DirectNetworkStatus.UNAVAILABLE -> "Off"
+                                    DirectNetworkStatus.ERROR -> "Error"
+                                },
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = badgeFg
+                            color = badgeFg,
                         )
                     }
                 }
@@ -226,7 +254,7 @@ fun DirectNetworkCard(
 
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                thickness = 1.dp
+                thickness = 1.dp,
             )
 
             // 2. Network SSID Field
@@ -234,10 +262,13 @@ fun DirectNetworkCard(
                 label = "NETWORK NAME",
                 value = ssid.ifBlank { "—" },
                 testTagPrefix = "ssid",
-                onCopy = if (ssid.isNotBlank()) {
-                    { copyToClipboard("DropSend Network", ssid, "Network name copied") }
-                } else null,
-                copyContentDescription = "Copy network name $ssid"
+                onCopy =
+                    if (ssid.isNotBlank()) {
+                        { copyToClipboard("DropSend Network", ssid, "Network name copied") }
+                    } else {
+                        null
+                    },
+                copyContentDescription = "Copy network name $ssid",
             )
 
             // 3. IP Address Field
@@ -246,10 +277,13 @@ fun DirectNetworkCard(
                 value = ipAddress.ifBlank { "—" },
                 isMonospace = true,
                 testTagPrefix = "ip",
-                onCopy = if (ipAddress.isNotBlank()) {
-                    { copyToClipboard("DropSend IP", ipAddress, "IP address copied") }
-                } else null,
-                copyContentDescription = "Copy IP address $ipAddress"
+                onCopy =
+                    if (ipAddress.isNotBlank()) {
+                        { copyToClipboard("DropSend IP", ipAddress, "IP address copied") }
+                    } else {
+                        null
+                    },
+                copyContentDescription = "Copy IP address $ipAddress",
             )
 
             // 4. Wi-Fi Password Field (Masked by default with Show/Hide toggle)
@@ -257,19 +291,21 @@ fun DirectNetworkCard(
                 val displayPassword = if (isPasswordVisible) passphrase else "••••••••••••••"
 
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.6f))
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.6f))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
                     Text(
                         text = "WI-FI PASSWORD",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style =
+                            MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.8.sp,
+                            ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
                     Spacer(modifier = Modifier.height(2.dp))
@@ -277,58 +313,64 @@ fun DirectNetworkCard(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
                             text = displayPassword,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Medium,
-                                letterSpacing = if (isPasswordVisible) 0.5.sp else 2.sp
-                            ),
+                            style =
+                                MaterialTheme.typography.bodyLarge.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Medium,
+                                    letterSpacing = if (isPasswordVisible) 0.5.sp else 2.sp,
+                                ),
                             color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("direct_network_password_text"),
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .testTag("direct_network_password_text"),
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
                         )
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             // Show/Hide Toggle Button (Accessible >= 48dp touch target)
                             IconButton(
                                 onClick = { isPasswordVisible = !isPasswordVisible },
-                                modifier = Modifier
-                                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                                    .testTag("toggle_password_visibility_button"),
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.primary
-                                )
+                                modifier =
+                                    Modifier
+                                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                        .testTag("toggle_password_visibility_button"),
+                                colors =
+                                    IconButtonDefaults.iconButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.primary,
+                                    ),
                             ) {
                                 Icon(
                                     imageVector = if (isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     contentDescription = if (isPasswordVisible) "Hide Wi-Fi password" else "Show Wi-Fi password",
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
 
                             // Copy Password Button
                             IconButton(
                                 onClick = { copyToClipboard("DropSend Password", passphrase, "Wi-Fi password copied") },
-                                modifier = Modifier
-                                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                                    .testTag("copy_password_button"),
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.primary
-                                )
+                                modifier =
+                                    Modifier
+                                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                        .testTag("copy_password_button"),
+                                colors =
+                                    IconButtonDefaults.iconButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.primary,
+                                    ),
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ContentCopy,
                                     contentDescription = "Copy Wi-Fi password",
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
                         }
@@ -338,22 +380,23 @@ fun DirectNetworkCard(
 
             // 5. Explanatory Instructional Footer
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 2.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(
                     imageVector = Icons.Default.Devices,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(16.dp),
                 )
                 Text(
                     text = "Connect another device to this network to transfer files directly.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -371,7 +414,7 @@ private fun DirectNetworkInfoRow(
     isMonospace: Boolean = false,
     testTagPrefix: String = "info",
     onCopy: (() -> Unit)? = null,
-    copyContentDescription: String = "Copy"
+    copyContentDescription: String = "Copy",
 ) {
     var isJustCopied by remember { mutableStateOf(false) }
 
@@ -383,19 +426,21 @@ private fun DirectNetworkInfoRow(
     }
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.6f))
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.6f))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp
-            ),
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style =
+                MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Spacer(modifier = Modifier.height(2.dp))
@@ -403,20 +448,22 @@ private fun DirectNetworkInfoRow(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = value,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default
-                ),
+                style =
+                    MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
+                    ),
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("${testTagPrefix}_value_text"),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .testTag("${testTagPrefix}_value_text"),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
 
             if (onCopy != null) {
@@ -425,24 +472,26 @@ private fun DirectNetworkInfoRow(
                         onCopy()
                         isJustCopied = true
                     },
-                    modifier = Modifier
-                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                        .testTag("copy_${testTagPrefix}_button"),
-                    colors = IconButtonDefaults.iconButtonColors(
-                        contentColor = if (isJustCopied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
-                    )
+                    modifier =
+                        Modifier
+                            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            .testTag("copy_${testTagPrefix}_button"),
+                    colors =
+                        IconButtonDefaults.iconButtonColors(
+                            contentColor = if (isJustCopied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary,
+                        ),
                 ) {
                     if (isJustCopied) {
                         Icon(
                             imageVector = Icons.Default.Check,
                             contentDescription = "Copied",
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                     } else {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
                             contentDescription = copyContentDescription,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }

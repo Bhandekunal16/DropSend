@@ -16,8 +16,9 @@ import android.util.Log
  * - Transfer Error / Cancellation (warning buzz)
  * - QR Scan / Button Tap (crisp click)
  */
-class HapticFeedbackHelper(private val context: Context) {
-
+class HapticFeedbackHelper(
+    private val context: Context,
+) {
     private val vibrator: Vibrator? by lazy {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -146,10 +147,9 @@ class HapticFeedbackHelper(private val context: Context) {
         @Volatile
         private var instance: HapticFeedbackHelper? = null
 
-        fun getInstance(context: Context): HapticFeedbackHelper {
-            return instance ?: synchronized(this) {
+        fun getInstance(context: Context): HapticFeedbackHelper =
+            instance ?: synchronized(this) {
                 instance ?: HapticFeedbackHelper(context.applicationContext).also { instance = it }
             }
-        }
     }
 }

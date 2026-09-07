@@ -4,7 +4,7 @@ import android.net.Uri
 
 enum class SharingRole {
     SENDER,
-    RECEIVER
+    RECEIVER,
 }
 
 enum class SessionState {
@@ -20,20 +20,23 @@ enum class SessionState {
     FAILED,
     CANCELLED,
     EXPIRED,
-    DISCONNECTED
+    DISCONNECTED,
 }
 
-enum class TransportType(val displayName: String, val isFast: Boolean) {
+enum class TransportType(
+    val displayName: String,
+    val isFast: Boolean,
+) {
     WIFI_DIRECT("Wi-Fi Direct", true),
     LOCAL_WIFI("Local Wi-Fi", true),
-    BLUETOOTH("Bluetooth Fallback", false)
+    BLUETOOTH("Bluetooth Fallback", false),
 }
 
 enum class FileTransferStatus {
     PENDING,
     TRANSFERRING,
     COMPLETED,
-    FAILED
+    FAILED,
 }
 
 data class DiscoveredDevice(
@@ -47,7 +50,7 @@ data class DiscoveredDevice(
     val isReadyToReceive: Boolean = true,
     val lastSeenTimestamp: Long = System.currentTimeMillis(),
     val sessionId: String? = null,
-    val discoveryGeneration: Long = 0L
+    val discoveryGeneration: Long = 0L,
 )
 
 data class TransferFile(
@@ -58,7 +61,7 @@ data class TransferFile(
     val sizeBytes: Long,
     val checksumSha256: String = "",
     val bytesTransferred: Long = 0L,
-    val status: FileTransferStatus = FileTransferStatus.PENDING
+    val status: FileTransferStatus = FileTransferStatus.PENDING,
 ) {
     val formattedSize: String
         get() = formatFileSize(sizeBytes)
@@ -80,7 +83,7 @@ data class TransferProgress(
     val verificationCode: String = "",
     val transportType: TransportType = TransportType.LOCAL_WIFI,
     val isPaused: Boolean = false,
-    val isReconnecting: Boolean = false
+    val isReconnecting: Boolean = false,
 ) {
     val overallProgressFraction: Float
         get() = if (totalSizeBytes > 0) (totalBytesTransferred.toFloat() / totalSizeBytes.toFloat()).coerceIn(0f, 1f) else 0f
@@ -89,21 +92,23 @@ data class TransferProgress(
         get() = (overallProgressFraction * 100).toInt()
 
     val formattedSpeed: String
-        get() = if (speedBytesPerSec > 1024 * 1024) {
-            String.format("%.1f MB/s", speedBytesPerSec / (1024.0 * 1024.0))
-        } else if (speedBytesPerSec > 1024) {
-            String.format("%.0f KB/s", speedBytesPerSec / 1024.0)
-        } else {
-            "$speedBytesPerSec B/s"
-        }
+        get() =
+            if (speedBytesPerSec > 1024 * 1024) {
+                String.format("%.1f MB/s", speedBytesPerSec / (1024.0 * 1024.0))
+            } else if (speedBytesPerSec > 1024) {
+                String.format("%.0f KB/s", speedBytesPerSec / 1024.0)
+            } else {
+                "$speedBytesPerSec B/s"
+            }
 
     val formattedEta: String
-        get() = when {
-            etaSeconds <= 0 -> "--"
-            etaSeconds < 60 -> "${etaSeconds}s"
-            etaSeconds < 3600 -> "${etaSeconds / 60}m ${etaSeconds % 60}s"
-            else -> "${etaSeconds / 3600}h ${(etaSeconds % 3600) / 60}m"
-        }
+        get() =
+            when {
+                etaSeconds <= 0 -> "--"
+                etaSeconds < 60 -> "${etaSeconds}s"
+                etaSeconds < 3600 -> "${etaSeconds / 60}m ${etaSeconds % 60}s"
+                else -> "${etaSeconds / 3600}h ${(etaSeconds % 3600) / 60}m"
+            }
 
     val formattedTransferredVsTotal: String
         get() = "${formatFileSize(totalBytesTransferred)} / ${formatFileSize(totalSizeBytes)}"

@@ -53,7 +53,6 @@ import com.example.presentation.transfer.TransferScreen
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
-
     private val viewModel: DropSendViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,7 +67,7 @@ class MainActivity : ComponentActivity() {
 
             MyApplicationTheme(
                 palette = currentPalette,
-                darkModePreference = darkModePreference
+                darkModePreference = darkModePreference,
             ) {
                 DropSendApp(viewModel = viewModel)
             }
@@ -84,23 +83,26 @@ class MainActivity : ComponentActivity() {
         intent ?: return
         when (intent.action) {
             Intent.ACTION_SEND -> {
-                val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra(Intent.EXTRA_STREAM)
-                }
+                val uri =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(Intent.EXTRA_STREAM)
+                    }
                 if (uri != null) {
                     viewModel.selectFiles(listOf(uri))
                 }
             }
+
             Intent.ACTION_SEND_MULTIPLE -> {
-                val uris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
-                }
+                val uris =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+                    }
                 if (!uris.isNullOrEmpty()) {
                     viewModel.selectFiles(uris)
                 }
@@ -119,10 +121,11 @@ fun DropSendApp(viewModel: DropSendViewModel) {
 
     var showHistorySheet by remember { mutableStateOf(false) }
 
-    val requestPermissions = rememberDropSendPermissionState(context) {
-        // Permissions granted
-        viewModel.refreshConnectivity()
-    }
+    val requestPermissions =
+        rememberDropSendPermissionState(context) {
+            // Permissions granted
+            viewModel.refreshConnectivity()
+        }
 
     LaunchedEffect(Unit) {
         requestPermissions()
@@ -140,20 +143,21 @@ fun DropSendApp(viewModel: DropSendViewModel) {
                 isWifiOn = connectivityState.isWifiOn,
                 isBluetoothOn = connectivityState.isBluetoothOn,
                 isHotspotActive = localHotspotInfo.isActive,
-                showRadioPills = true
+                showRadioPills = true,
             )
-        }
+        },
     ) { innerPadding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(innerPadding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(innerPadding),
         ) {
             AnimatedContent(
                 targetState = uiState.sessionState to uiState.role,
                 transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "screen_navigation"
+                label = "screen_navigation",
             ) { (state, role) ->
                 when {
                     // SUCCESS SCREEN
@@ -166,7 +170,7 @@ fun DropSendApp(viewModel: DropSendViewModel) {
                             onOpenFile = { file -> viewModel.openFile(file) },
                             onOpenDownloadsFolder = { viewModel.openDownloadsFolder() },
                             onSendMore = { viewModel.resetSessionState() },
-                            onDone = { viewModel.resetSessionState() }
+                            onDone = { viewModel.resetSessionState() },
                         )
                     }
 
@@ -178,11 +182,14 @@ fun DropSendApp(viewModel: DropSendViewModel) {
                             files = uiState.selectedFiles,
                             progress = uiState.transferProgress,
                             onPauseResume = {
-                                if (uiState.transferProgress.isPaused) viewModel.resumeTransfer()
-                                else viewModel.pauseTransfer()
+                                if (uiState.transferProgress.isPaused) {
+                                    viewModel.resumeTransfer()
+                                } else {
+                                    viewModel.pauseTransfer()
+                                }
                             },
                             onCancel = { viewModel.cancelTransfer() },
-                            onOpenFile = { file -> viewModel.openFile(file) }
+                            onOpenFile = { file -> viewModel.openFile(file) },
                         )
                     }
 
@@ -199,7 +206,7 @@ fun DropSendApp(viewModel: DropSendViewModel) {
                             onAccept = { viewModel.acceptIncomingRequest() },
                             onDecline = { viewModel.declineIncomingRequest() },
                             onCancel = { viewModel.resetSessionState() },
-                            onSimulateInboundTransfer = { viewModel.launchReceiverSimulation() }
+                            onSimulateInboundTransfer = { viewModel.launchReceiverSimulation() },
                         )
                     }
 
@@ -222,7 +229,7 @@ fun DropSendApp(viewModel: DropSendViewModel) {
                             onRescan = { viewModel.rescanDevices() },
                             onDirectIpConnect = { ip -> viewModel.connectToDirectIp(ip) },
                             onAddDemoPeer = { viewModel.addDemoPeer() },
-                            onCancel = { viewModel.resetSessionState() }
+                            onCancel = { viewModel.resetSessionState() },
                         )
                     }
 
@@ -255,7 +262,7 @@ fun DropSendApp(viewModel: DropSendViewModel) {
                             },
                             onPopulateDemoPeers = {
                                 viewModel.populateDemoPeers()
-                            }
+                            },
                         )
                     }
                 }
@@ -269,15 +276,16 @@ fun DropSendApp(viewModel: DropSendViewModel) {
                     onDeleteItem = { id -> viewModel.deleteHistoryItem(id) },
                     onOpenFile = { entity ->
                         val uri = entity.fileUriString?.let { Uri.parse(it) }
-                        val file = TransferFile(
-                            id = entity.sessionId,
-                            name = entity.fileName,
-                            mimeType = entity.mimeType,
-                            sizeBytes = entity.sizeBytes,
-                            uri = uri
-                        )
+                        val file =
+                            TransferFile(
+                                id = entity.sessionId,
+                                name = entity.fileName,
+                                mimeType = entity.mimeType,
+                                sizeBytes = entity.sizeBytes,
+                                uri = uri,
+                            )
                         viewModel.openFile(file)
-                    }
+                    },
                 )
             }
 
@@ -289,30 +297,32 @@ fun DropSendApp(viewModel: DropSendViewModel) {
                     title = {
                         Text(
                             text = "Transfer Alert",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold
-                            )
+                            style =
+                                MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                ),
                         )
                     },
                     text = {
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
                                 text = uiState.errorMessage ?: "An unexpected error occurred during transfer.",
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MaterialTheme.typography.bodyMedium,
                             )
                             Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                    .padding(8.dp)
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                        .padding(8.dp),
                             ) {
                                 Text(
                                     text = "Security Notice: All incomplete or unverified temporary files were safely cleaned up. No untrusted data was written to storage.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -325,7 +335,7 @@ fun DropSendApp(viewModel: DropSendViewModel) {
                                 } else {
                                     viewModel.resetSessionState()
                                 }
-                            }
+                            },
                         ) {
                             Text(if (isRecoverableState && uiState.selectedFiles.isNotEmpty()) "Retry" else "OK")
                         }
@@ -336,7 +346,7 @@ fun DropSendApp(viewModel: DropSendViewModel) {
                                 Text("Dismiss")
                             }
                         }
-                    }
+                    },
                 )
             }
         }

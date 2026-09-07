@@ -63,11 +63,11 @@ enum class SimulatedDevicePreset(
     val title: String,
     val deviceId: String,
     val transportType: TransportType,
-    val defaultSpeedMbps: Float
+    val defaultSpeedMbps: Float,
 ) {
     PIXEL_9_PRO("Pixel 9 Pro (Wi-Fi Direct)", "DROP-9A14", TransportType.WIFI_DIRECT, 55f),
     GALAXY_S24("Galaxy S24 Ultra (Local LAN)", "DROP-3B88", TransportType.LOCAL_WIFI, 35f),
-    NOTHING_PHONE("Nothing Phone 2 (Bluetooth)", "DROP-7F20", TransportType.BLUETOOTH, 2.5f)
+    NOTHING_PHONE("Nothing Phone 2 (Bluetooth)", "DROP-7F20", TransportType.BLUETOOTH, 2.5f),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,62 +77,65 @@ fun EmulatorTestBottomSheet(
     onLaunchReceiverSimulation: (String, Float) -> Unit,
     onPopulateDemoPeers: () -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Sender Test, 1 = Receiver Test, 2 = Discovery Sandbox
     var selectedPreset by remember { mutableStateOf(SimulatedDevicePreset.PIXEL_9_PRO) }
     var selectedSpeedOption by remember { mutableIntStateOf(0) } // 0 = Fast (45MB/s), 1 = Balanced (20MB/s), 2 = Bluetooth (2MB/s)
 
-    val speedMbps = when (selectedSpeedOption) {
-        0 -> 50f
-        1 -> 20f
-        else -> 2.5f
-    }
+    val speedMbps =
+        when (selectedSpeedOption) {
+            0 -> 50f
+            1 -> 20f
+            else -> 2.5f
+        }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
-        modifier = modifier
+        modifier = modifier,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 32.dp)
+                    .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // Title Header
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Default.Science,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(22.dp),
                     )
                 }
                 Column {
                     Text(
                         text = "Virtual Peer Testbench",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
                         text = "Simulate 2-device transfers on single screen or emulator",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -144,9 +147,10 @@ fun EmulatorTestBottomSheet(
                 selectedTabIndex = selectedTab,
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 contentColor = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp)),
             ) {
                 Tab(
                     selected = selectedTab == 0,
@@ -154,12 +158,12 @@ fun EmulatorTestBottomSheet(
                     text = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
                             Text("Send Test", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
-                    }
+                    },
                 )
                 Tab(
                     selected = selectedTab == 1,
@@ -167,12 +171,12 @@ fun EmulatorTestBottomSheet(
                     text = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
                             Text("Receive Test", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
-                    }
+                    },
                 )
                 Tab(
                     selected = selectedTab == 2,
@@ -180,12 +184,12 @@ fun EmulatorTestBottomSheet(
                     text = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Icon(Icons.Default.Devices, contentDescription = null, modifier = Modifier.size(16.dp))
                             Text("Discovery", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
-                    }
+                    },
                 )
             }
 
@@ -197,7 +201,7 @@ fun EmulatorTestBottomSheet(
                     text = "1. Select Virtual Receiver Profile",
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.align(Alignment.Start)
+                    modifier = Modifier.align(Alignment.Start),
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -206,38 +210,59 @@ fun EmulatorTestBottomSheet(
                     SimulatedDevicePreset.values().forEach { preset ->
                         val isSelected = selectedPreset == preset
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                .border(
-                                    1.dp,
-                                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                                    RoundedCornerShape(14.dp)
-                                )
-                                .clickable { selectedPreset = preset }
-                                .padding(12.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                                .copy(
+                                                    alpha = 0.5f,
+                                                )
+                                        },
+                                    ).border(
+                                        1.dp,
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.outline.copy(
+                                                alpha = 0.2f,
+                                            )
+                                        },
+                                        RoundedCornerShape(14.dp),
+                                    ).clickable { selectedPreset = preset }
+                                    .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = Icons.Default.PhoneAndroid,
                                     contentDescription = null,
                                     tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(24.dp),
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
                                         text = preset.title,
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                                     )
                                     Text(
                                         text = "ID: ${preset.deviceId} • ${preset.transportType.displayName}",
                                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color =
+                                            if (isSelected) {
+                                                MaterialTheme.colorScheme.onPrimaryContainer.copy(
+                                                    alpha = 0.8f,
+                                                )
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
                                     )
                                 }
                             }
@@ -247,7 +272,7 @@ fun EmulatorTestBottomSheet(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = "Selected",
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                         }
@@ -261,32 +286,32 @@ fun EmulatorTestBottomSheet(
                     text = "2. Simulation Speed",
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.align(Alignment.Start)
+                    modifier = Modifier.align(Alignment.Start),
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     SpeedChip(
                         label = "Wi-Fi 6 (50 MB/s)",
                         isSelected = selectedSpeedOption == 0,
                         onClick = { selectedSpeedOption = 0 },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     SpeedChip(
                         label = "LAN (20 MB/s)",
                         isSelected = selectedSpeedOption == 1,
                         onClick = { selectedSpeedOption = 1 },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     SpeedChip(
                         label = "BT LE (2.5 MB/s)",
                         isSelected = selectedSpeedOption == 2,
                         onClick = { selectedSpeedOption = 2 },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                 }
 
@@ -294,50 +319,53 @@ fun EmulatorTestBottomSheet(
 
                 Button(
                     onClick = {
-                        val device = DiscoveredDevice(
-                            id = selectedPreset.deviceId,
-                            name = selectedPreset.title,
-                            transportType = selectedPreset.transportType,
-                            ipAddress = "192.168.43.50",
-                            port = 8888,
-                            isReadyToReceive = true
-                        )
+                        val device =
+                            DiscoveredDevice(
+                                id = selectedPreset.deviceId,
+                                name = selectedPreset.title,
+                                transportType = selectedPreset.transportType,
+                                ipAddress = "192.168.43.50",
+                                port = 8888,
+                                isReadyToReceive = true,
+                            )
                         onDismiss()
                         onLaunchSenderSimulation(device, speedMbps)
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("launch_sender_simulation_button"),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .testTag("launch_sender_simulation_button"),
                     shape = RoundedCornerShape(26.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Start Simulated File Send",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     )
                 }
             } else if (selectedTab == 1) {
                 // RECEIVER TEST
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .padding(14.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .padding(14.dp),
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = "Incoming Transfer Simulator",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
                             text = "Simulates a virtual peer (\"Pixel 9 Pro\") requesting to send 4 high-res sample files (95.2 MB total). You can test the Accept/Decline flow, 4-digit code matching, streaming progress, and completion.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -348,32 +376,32 @@ fun EmulatorTestBottomSheet(
                     text = "Simulation Speed",
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.align(Alignment.Start)
+                    modifier = Modifier.align(Alignment.Start),
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     SpeedChip(
                         label = "Wi-Fi 6 (50 MB/s)",
                         isSelected = selectedSpeedOption == 0,
                         onClick = { selectedSpeedOption = 0 },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     SpeedChip(
                         label = "LAN (20 MB/s)",
                         isSelected = selectedSpeedOption == 1,
                         onClick = { selectedSpeedOption = 1 },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     SpeedChip(
                         label = "BT LE (2.5 MB/s)",
                         isSelected = selectedSpeedOption == 2,
                         onClick = { selectedSpeedOption = 2 },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                 }
 
@@ -384,39 +412,45 @@ fun EmulatorTestBottomSheet(
                         onDismiss()
                         onLaunchReceiverSimulation("Pixel 9 Pro (Simulated)", speedMbps)
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("launch_receiver_simulation_button"),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .testTag("launch_receiver_simulation_button"),
                     shape = RoundedCornerShape(26.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
                 ) {
                     Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Trigger Simulated Inbound Request",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     )
                 }
             } else {
                 // DISCOVERY SANDBOX
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .padding(14.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .padding(14.dp),
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = "Populate Nearby Devices",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
                             text = "Inject multiple simulated peers across Wi-Fi Direct, Local LAN, and Bluetooth into the discovery radar list so you can test device selection and UI responsiveness.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -428,18 +462,19 @@ fun EmulatorTestBottomSheet(
                         onPopulateDemoPeers()
                         onDismiss()
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("populate_discovery_sandbox_button"),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .testTag("populate_discovery_sandbox_button"),
                     shape = RoundedCornerShape(26.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 ) {
                     Icon(Icons.Default.Devices, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Inject Virtual Peers into Radar",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     )
                 }
             }
@@ -452,28 +487,36 @@ private fun SpeedChip(
     label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-            .border(
-                1.dp,
-                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
-                RoundedCornerShape(12.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 6.dp),
-        contentAlignment = Alignment.Center
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(
+                            alpha = 0.4f,
+                        )
+                    },
+                ).border(
+                    1.dp,
+                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                    RoundedCornerShape(12.dp),
+                ).clickable(onClick = onClick)
+                .padding(vertical = 10.dp, horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 11.sp
-            ),
-            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            style =
+                MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 11.sp,
+                ),
+            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

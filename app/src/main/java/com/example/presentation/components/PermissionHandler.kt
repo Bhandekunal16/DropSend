@@ -32,48 +32,51 @@ import androidx.core.content.ContextCompat
 @Composable
 fun rememberDropSendPermissionState(
     context: Context,
-    onPermissionsGranted: () -> Unit
+    onPermissionsGranted: () -> Unit,
 ): () -> Unit {
-    val requiredPermissions = remember {
-        val list = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            list.add(Manifest.permission.BLUETOOTH_SCAN)
-            list.add(Manifest.permission.BLUETOOTH_ADVERTISE)
-            list.add(Manifest.permission.BLUETOOTH_CONNECT)
-        } else {
-            list.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
+    val requiredPermissions =
+        remember {
+            val list = mutableListOf<String>()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                list.add(Manifest.permission.BLUETOOTH_SCAN)
+                list.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+                list.add(Manifest.permission.BLUETOOTH_CONNECT)
+            } else {
+                list.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            list.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-            list.add(Manifest.permission.POST_NOTIFICATIONS)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                list.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+                list.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            list.toTypedArray()
         }
-        list.toTypedArray()
-    }
 
     var showRationaleDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
 
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        val allGranted = results.values.all { it }
-        if (allGranted) {
-            onPermissionsGranted()
-        } else {
-            // Check if essential permissions for discovery were denied
-            val criticalDenied = results.filter { !it.value }.keys.any {
-                it == Manifest.permission.NEARBY_WIFI_DEVICES ||
-                it == Manifest.permission.ACCESS_FINE_LOCATION ||
-                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && it == Manifest.permission.BLUETOOTH_SCAN)
-            }
-            if (criticalDenied) {
-                showSettingsDialog = true
-            } else {
+    val launcher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestMultiplePermissions(),
+        ) { results ->
+            val allGranted = results.values.all { it }
+            if (allGranted) {
                 onPermissionsGranted()
+            } else {
+                // Check if essential permissions for discovery were denied
+                val criticalDenied =
+                    results.filter { !it.value }.keys.any {
+                        it == Manifest.permission.NEARBY_WIFI_DEVICES ||
+                            it == Manifest.permission.ACCESS_FINE_LOCATION ||
+                            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && it == Manifest.permission.BLUETOOTH_SCAN)
+                    }
+                if (criticalDenied) {
+                    showSettingsDialog = true
+                } else {
+                    onPermissionsGranted()
+                }
             }
         }
-    }
 
     if (showRationaleDialog) {
         AlertDialog(
@@ -81,20 +84,20 @@ fun rememberDropSendPermissionState(
             title = {
                 Text(
                     text = "Permissions Required for Local Transfer",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 )
             },
             text = {
                 Column {
                     Text(
                         text = "DropSend uses Nearby Wi-Fi and Bluetooth to discover nearby devices and transfer files directly without using cloud servers.",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "• Nearby Devices / Wi-Fi: Finds peer devices on your local network\n• Bluetooth: Low-energy peer announcement and pairing\n• Notifications: Shows live transfer progress and completion",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             },
@@ -102,12 +105,13 @@ fun rememberDropSendPermissionState(
                 Button(
                     onClick = {
                         showRationaleDialog = false
-                        val missing = requiredPermissions.filter {
-                            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-                        }
+                        val missing =
+                            requiredPermissions.filter {
+                                ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                            }
                         launcher.launch(missing.toTypedArray())
                     },
-                    modifier = Modifier.testTag("grant_permissions_button")
+                    modifier = Modifier.testTag("grant_permissions_button"),
                 ) {
                     Text("Continue")
                 }
@@ -116,7 +120,7 @@ fun rememberDropSendPermissionState(
                 TextButton(onClick = { showRationaleDialog = false }) {
                     Text("Not Now")
                 }
-            }
+            },
         )
     }
 
@@ -126,28 +130,29 @@ fun rememberDropSendPermissionState(
             title = {
                 Text(
                     text = "Permission Required",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 )
             },
             text = {
                 Text(
                     text = "Nearby device permissions are required to discover peers and transfer files offline. Please enable permissions in App Settings.",
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
                         showSettingsDialog = false
-                        val intent = Intent(
-                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            Uri.fromParts("package", context.packageName, null)
-                        ).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
+                        val intent =
+                            Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null),
+                            ).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
                         context.startActivity(intent)
                     },
-                    modifier = Modifier.testTag("open_settings_button")
+                    modifier = Modifier.testTag("open_settings_button"),
                 ) {
                     Text("Open Settings")
                 }
@@ -156,14 +161,15 @@ fun rememberDropSendPermissionState(
                 OutlinedButton(onClick = { showSettingsDialog = false }) {
                     Text("Cancel")
                 }
-            }
+            },
         )
     }
 
     return {
-        val missing = requiredPermissions.filter {
-            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-        }
+        val missing =
+            requiredPermissions.filter {
+                ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+            }
         if (missing.isEmpty()) {
             onPermissionsGranted()
         } else {

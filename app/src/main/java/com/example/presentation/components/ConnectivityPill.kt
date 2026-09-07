@@ -53,14 +53,14 @@ import com.example.ui.theme.SleekRed
 fun ConnectivityStatusRow(
     isBluetoothOn: Boolean,
     isWifiOn: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
 
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         ConnectivityPill(
             label = "BT",
@@ -70,12 +70,14 @@ fun ConnectivityStatusRow(
             testTag = "bluetooth_status_pill",
             onClick = {
                 try {
-                    val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
+                    val intent =
+                        Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
                     context.startActivity(intent)
-                } catch (_: Exception) {}
-            }
+                } catch (_: Exception) {
+                }
+            },
         )
 
         ConnectivityPill(
@@ -86,12 +88,14 @@ fun ConnectivityStatusRow(
             testTag = "wifi_status_pill",
             onClick = {
                 try {
-                    val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
+                    val intent =
+                        Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
                     context.startActivity(intent)
-                } catch (_: Exception) {}
-            }
+                } catch (_: Exception) {
+                }
+            },
         )
     }
 }
@@ -104,50 +108,54 @@ fun ConnectivityPill(
     inactiveIcon: ImageVector,
     testTag: String = "connectivity_pill",
     onClick: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val statusColor = if (isOn) SleekGreen else SleekRed
     val animatedBgColor by animateColorAsState(
         targetValue = if (isOn) statusColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-        label = "pill_bg_color"
+        label = "pill_bg_color",
     )
     val animatedBorderColor by animateColorAsState(
         targetValue = if (isOn) statusColor.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
-        label = "pill_border_color"
+        label = "pill_border_color",
     )
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse_pill")
     val dotScale by infiniteTransition.animateFloat(
         initialValue = 0.85f,
         targetValue = 1.25f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "dot_pulse"
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(1200, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+        label = "dot_pulse",
     )
 
     Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(animatedBgColor)
-            .border(1.dp, animatedBorderColor, RoundedCornerShape(16.dp))
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(onClick = onClick)
-                } else Modifier
-            )
-            .padding(horizontal = 10.dp, vertical = 6.dp)
-            .testTag(testTag),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(animatedBgColor)
+                .border(1.dp, animatedBorderColor, RoundedCornerShape(16.dp))
+                .then(
+                    if (onClick != null) {
+                        Modifier.clickable(onClick = onClick)
+                    } else {
+                        Modifier
+                    },
+                ).padding(horizontal = 10.dp, vertical = 6.dp)
+                .testTag(testTag),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         // Status indicator dot (pulses when active)
         Box(
-            modifier = Modifier
-                .size(7.dp)
-                .scale(if (isOn) dotScale else 1f)
-                .clip(CircleShape)
-                .background(statusColor)
+            modifier =
+                Modifier
+                    .size(7.dp)
+                    .scale(if (isOn) dotScale else 1f)
+                    .clip(CircleShape)
+                    .background(statusColor),
         )
 
         Spacer(modifier = Modifier.width(6.dp))
@@ -156,13 +164,13 @@ fun ConnectivityPill(
         AnimatedContent(
             targetState = isOn,
             transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) },
-            label = "icon_anim"
+            label = "icon_anim",
         ) { active ->
             Icon(
                 imageVector = if (active) activeIcon else inactiveIcon,
                 contentDescription = "$label status",
                 tint = if (active) statusColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.size(13.dp)
+                modifier = Modifier.size(13.dp),
             )
         }
 
@@ -173,8 +181,7 @@ fun ConnectivityPill(
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.2).sp,
-            color = if (isOn) statusColor else MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (isOn) statusColor else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
-

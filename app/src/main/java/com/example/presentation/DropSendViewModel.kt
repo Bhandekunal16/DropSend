@@ -62,15 +62,16 @@ data class UiState(
     val statusMessage: String? = null,
     val completedFilesCount: Int = 0,
     val totalTransferredBytes: Long = 0L,
-    val sessionDurationSeconds: Long = 0L
+    val sessionDurationSeconds: Long = 0L,
 )
 
-class DropSendViewModel(application: Application) : AndroidViewModel(application) {
-
+class DropSendViewModel(
+    application: Application,
+) : AndroidViewModel(application) {
     companion object {
         private const val TAG = "DropSendViewModel"
         private const val CHUNK_SIZE_WIFI = 128 * 1024 // 128 KB
-        private const val CHUNK_SIZE_BT = 32 * 1024   // 32 KB
+        private const val CHUNK_SIZE_BT = 32 * 1024 // 32 KB
         const val DEFAULT_PORT = 8888
         private const val MAX_RECONNECT_ATTEMPTS = 3
     }
@@ -85,8 +86,9 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
     val hotspotAutoConnector = app.hotspotAutoConnector
 
     val localHotspotInfo: StateFlow<LocalHotspotInfo> = localHotspotManager.hotspotState
-    val transferHistory: StateFlow<List<TransferHistoryEntity>> = historyRepository.allHistory
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val transferHistory: StateFlow<List<TransferHistoryEntity>> =
+        historyRepository.allHistory
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val hapticHelper = HapticFeedbackHelper.getInstance(application)
 
@@ -105,12 +107,13 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         connectivityMonitor.updateState()
     }
 
-    private val _uiState = MutableStateFlow(
-        UiState(
-            localDeviceId = SessionCrypto.generateTemporaryIdentity(),
-            localDeviceName = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+    private val _uiState =
+        MutableStateFlow(
+            UiState(
+                localDeviceId = SessionCrypto.generateTemporaryIdentity(),
+                localDeviceName = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
+            ),
         )
-    )
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     private var activeTransport: TransferTransport? = null
@@ -166,7 +169,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 it.copy(
                     role = SharingRole.SENDER,
                     selectedFiles = resolved,
-                    sessionState = SessionState.IDLE
+                    sessionState = SessionState.IDLE,
                 )
             }
         }
@@ -191,7 +194,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 sessionState = SessionState.DISCOVERING,
                 role = SharingRole.SENDER,
                 localIpAddresses = ips,
-                errorMessage = null
+                errorMessage = null,
             )
         }
         discoveryManager.startDiscovery(_uiState.value.localDeviceId)
@@ -223,7 +226,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 localDeviceId = deviceId,
                 localIpAddresses = ips,
                 sessionState = SessionState.DISCOVERING,
-                errorMessage = null
+                errorMessage = null,
             )
         }
 
@@ -236,79 +239,92 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         }
 
         // 2. Start Dual Server (TCP for Wi-Fi / Hotspot + RFCOMM for Bluetooth)
-        serverListenJob = viewModelScope.launch(Dispatchers.IO) {
-            val connectedGuard = java.util.concurrent.atomic.AtomicBoolean(false)
-            val tcpTransport = TcpTransferTransport(TransportType.LOCAL_WIFI)
-            val btTransport = BluetoothTransferTransport(discoveryManager.bleDiscovery.bluetoothAdapter)
+        serverListenJob =
+            viewModelScope.launch(Dispatchers.IO) {
+                val connectedGuard =
+                    java.util.concurrent.atomic
+                        .AtomicBoolean(false)
+                val tcpTransport = TcpTransferTransport(TransportType.LOCAL_WIFI)
+                val btTransport = BluetoothTransferTransport(discoveryManager.bleDiscovery.bluetoothAdapter)
 
-            val tcpPort = try {
-                tcpTransport.startServer(DEFAULT_PORT)
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed starting TCP server: ${e.message}")
-                DEFAULT_PORT
-            }
+                val tcpPort =
+                    try {
+                        tcpTransport.startServer(DEFAULT_PORT)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed starting TCP server: ${e.message}")
+                        DEFAULT_PORT
+                    }
 
-            val hasBtServer = try {
-                if (discoveryManager.bleDiscovery.isBluetoothEnabled) {
-                    btTransport.startServer(0)
-                    true
-                } else false
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed starting Bluetooth RFCOMM server: ${e.message}")
-                false
-            }
-
-            // Start advertising via LAN mDNS / UDP and BLE
-            discoveryManager.startAdvertising(deviceId, _uiState.value.localDeviceName, tcpPort)
-
-            // TCP Receiver Listener
-            launch {
-                try {
-                    tcpTransport.acceptConnection()
-                    if (connectedGuard.compareAndSet(false, true)) {
-                        activeTransport = tcpTransport
-                        try { btTransport.disconnect() } catch (_: Exception) {}
-                        withContext(Dispatchers.Main) {
-                            _uiState.update { it.copy(sessionState = SessionState.AUTHENTICATING) }
-                            discoveryManager.stopAdvertising()
-                            discoveryManager.stopDiscovery()
-                            listenToIncomingMessages(tcpTransport)
+                val hasBtServer =
+                    try {
+                        if (discoveryManager.bleDiscovery.isBluetoothEnabled) {
+                            btTransport.startServer(0)
+                            true
+                        } else {
+                            false
                         }
-                    } else {
-                        tcpTransport.disconnect()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed starting Bluetooth RFCOMM server: ${e.message}")
+                        false
                     }
-                } catch (e: Exception) {
-                    if (!connectedGuard.get()) {
-                        Log.w(TAG, "TCP listen ended: ${e.message}")
-                    }
-                }
-            }
 
-            // Bluetooth RFCOMM Receiver Listener
-            if (hasBtServer) {
+                // Start advertising via LAN mDNS / UDP and BLE
+                discoveryManager.startAdvertising(deviceId, _uiState.value.localDeviceName, tcpPort)
+
+                // TCP Receiver Listener
                 launch {
                     try {
-                        btTransport.acceptConnection()
+                        tcpTransport.acceptConnection()
                         if (connectedGuard.compareAndSet(false, true)) {
-                            activeTransport = btTransport
-                            try { tcpTransport.disconnect() } catch (_: Exception) {}
+                            activeTransport = tcpTransport
+                            try {
+                                btTransport.disconnect()
+                            } catch (_: Exception) {
+                            }
                             withContext(Dispatchers.Main) {
                                 _uiState.update { it.copy(sessionState = SessionState.AUTHENTICATING) }
                                 discoveryManager.stopAdvertising()
                                 discoveryManager.stopDiscovery()
-                                listenToIncomingMessages(btTransport)
+                                listenToIncomingMessages(tcpTransport)
                             }
                         } else {
-                            btTransport.disconnect()
+                            tcpTransport.disconnect()
                         }
                     } catch (e: Exception) {
                         if (!connectedGuard.get()) {
-                            Log.w(TAG, "Bluetooth RFCOMM listen ended: ${e.message}")
+                            Log.w(TAG, "TCP listen ended: ${e.message}")
+                        }
+                    }
+                }
+
+                // Bluetooth RFCOMM Receiver Listener
+                if (hasBtServer) {
+                    launch {
+                        try {
+                            btTransport.acceptConnection()
+                            if (connectedGuard.compareAndSet(false, true)) {
+                                activeTransport = btTransport
+                                try {
+                                    tcpTransport.disconnect()
+                                } catch (_: Exception) {
+                                }
+                                withContext(Dispatchers.Main) {
+                                    _uiState.update { it.copy(sessionState = SessionState.AUTHENTICATING) }
+                                    discoveryManager.stopAdvertising()
+                                    discoveryManager.stopDiscovery()
+                                    listenToIncomingMessages(btTransport)
+                                }
+                            } else {
+                                btTransport.disconnect()
+                            }
+                        } catch (e: Exception) {
+                            if (!connectedGuard.get()) {
+                                Log.w(TAG, "Bluetooth RFCOMM listen ended: ${e.message}")
+                            }
                         }
                     }
                 }
             }
-        }
     }
 
     /**
@@ -320,7 +336,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
             _uiState.update {
                 it.copy(
                     sessionState = SessionState.FAILED,
-                    errorMessage = "Unrecognized QR code format. Please scan the QR code from DropSend receiver."
+                    errorMessage = "Unrecognized QR code format. Please scan the QR code from DropSend receiver.",
                 )
             }
             return
@@ -328,21 +344,22 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
 
         discoveryManager.stopDiscovery()
 
-        val directDevice = DiscoveredDevice(
-            id = params.deviceId.ifBlank { "QR-" + params.ipAddress.takeLast(4) },
-            name = params.deviceName,
-            transportType = TransportType.WIFI_DIRECT,
-            ipAddress = params.ipAddress,
-            port = params.port,
-            isReadyToReceive = true
-        )
+        val directDevice =
+            DiscoveredDevice(
+                id = params.deviceId.ifBlank { "QR-" + params.ipAddress.takeLast(4) },
+                name = params.deviceName,
+                transportType = TransportType.WIFI_DIRECT,
+                ipAddress = params.ipAddress,
+                port = params.port,
+                isReadyToReceive = true,
+            )
 
         _uiState.update {
             it.copy(
                 targetDevice = directDevice,
                 sessionState = SessionState.CONNECTING,
                 statusMessage = "Connecting to Receiver's Direct Hotspot...",
-                errorMessage = null
+                errorMessage = null,
             )
         }
 
@@ -362,7 +379,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                     _uiState.update {
                         it.copy(
                             sessionState = SessionState.AUTHENTICATING,
-                            statusMessage = "Connected! Establishing encrypted handshake..."
+                            statusMessage = "Connected! Establishing encrypted handshake...",
                         )
                     }
                     listenToIncomingMessages(transport)
@@ -374,7 +391,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                     _uiState.update {
                         it.copy(
                             sessionState = SessionState.FAILED,
-                            errorMessage = "Could not connect to ${params.deviceName}. Make sure both devices are nearby."
+                            errorMessage = "Could not connect to ${params.deviceName}. Make sure both devices are nearby.",
                         )
                     }
                 }
@@ -385,19 +402,23 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
     /**
      * Direct IP Connect
      */
-    fun connectToDirectIp(ipOrHost: String, port: Int = DEFAULT_PORT) {
+    fun connectToDirectIp(
+        ipOrHost: String,
+        port: Int = DEFAULT_PORT,
+    ) {
         val trimmed = ipOrHost.trim()
         val targetIp = if (trimmed.contains(":")) trimmed.substringBefore(":") else trimmed
         val targetPort = if (trimmed.contains(":")) trimmed.substringAfter(":").toIntOrNull() ?: port else port
 
-        val directDevice = DiscoveredDevice(
-            id = "DROP-" + targetIp.replace(".", "").takeLast(4),
-            name = "Direct Peer ($targetIp:$targetPort)",
-            transportType = TransportType.LOCAL_WIFI,
-            ipAddress = targetIp,
-            port = targetPort,
-            isReadyToReceive = true
-        )
+        val directDevice =
+            DiscoveredDevice(
+                id = "DROP-" + targetIp.replace(".", "").takeLast(4),
+                name = "Direct Peer ($targetIp:$targetPort)",
+                transportType = TransportType.LOCAL_WIFI,
+                ipAddress = targetIp,
+                port = targetPort,
+                isReadyToReceive = true,
+            )
         connectToDevice(directDevice)
     }
 
@@ -405,14 +426,15 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
      * Add a simulated peer for single-device test or verification
      */
     fun addDemoPeer() {
-        val demoDevice = DiscoveredDevice(
-            id = "DROP-DEMO",
-            name = "Demo Android Peer",
-            transportType = TransportType.LOCAL_WIFI,
-            ipAddress = "127.0.0.1",
-            port = DEFAULT_PORT,
-            isReadyToReceive = true
-        )
+        val demoDevice =
+            DiscoveredDevice(
+                id = "DROP-DEMO",
+                name = "Demo Android Peer",
+                transportType = TransportType.LOCAL_WIFI,
+                ipAddress = "127.0.0.1",
+                port = DEFAULT_PORT,
+                isReadyToReceive = true,
+            )
         val current = _uiState.value.nearbyDevices.toMutableList()
         if (current.none { it.id == "DROP-DEMO" }) {
             current.add(demoDevice)
@@ -425,7 +447,8 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
      * Sender selects a target device to connect and send files
      */
     fun connectToDevice(device: DiscoveredDevice) {
-        val isSimulated = device.id in setOf("DROP-DEMO", "DROP-9A14", "DROP-3B88", "DROP-7F20", "DROP-4C61") ||
+        val isSimulated =
+            device.id in setOf("DROP-DEMO", "DROP-9A14", "DROP-3B88", "DROP-7F20", "DROP-4C61") ||
                 device.name.contains("Simulated", ignoreCase = true) ||
                 device.name.contains("Virtual", ignoreCase = true) ||
                 device.name.contains("Demo", ignoreCase = true)
@@ -440,23 +463,26 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
             it.copy(
                 targetDevice = device,
                 sessionState = SessionState.CONNECTING,
-                errorMessage = null
+                errorMessage = null,
             )
         }
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val transport: TransferTransport = when {
-                    device.ipAddress != null && device.ipAddress.isNotBlank() -> {
-                        TcpTransferTransport(device.transportType)
+                val transport: TransferTransport =
+                    when {
+                        device.ipAddress != null && device.ipAddress.isNotBlank() -> {
+                            TcpTransferTransport(device.transportType)
+                        }
+
+                        device.bluetoothAddress != null -> {
+                            BluetoothTransferTransport(discoveryManager.bleDiscovery.bluetoothAdapter)
+                        }
+
+                        else -> {
+                            TcpTransferTransport(TransportType.LOCAL_WIFI)
+                        }
                     }
-                    device.bluetoothAddress != null -> {
-                        BluetoothTransferTransport(discoveryManager.bleDiscovery.bluetoothAdapter)
-                    }
-                    else -> {
-                        TcpTransferTransport(TransportType.LOCAL_WIFI)
-                    }
-                }
                 activeTransport = transport
 
                 val targetHost = device.ipAddress ?: device.bluetoothAddress ?: "127.0.0.1"
@@ -473,7 +499,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                     _uiState.update {
                         it.copy(
                             sessionState = SessionState.FAILED,
-                            errorMessage = "Couldn't connect to ${device.name}. Ensure Wi-Fi or Bluetooth is active."
+                            errorMessage = "Couldn't connect to ${device.name}. Ensure Wi-Fi or Bluetooth is active.",
                         )
                     }
                 }
@@ -481,7 +507,10 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private suspend fun performSenderHandshake(transport: TransferTransport, device: DiscoveredDevice) {
+    private suspend fun performSenderHandshake(
+        transport: TransferTransport,
+        device: DiscoveredDevice,
+    ) {
         val myPubKeyBase64 = Base64.encodeToString(ecKeyPair.public.encoded, Base64.NO_WRAP)
         sessionToken = SessionCrypto.generateSessionToken()
 
@@ -490,8 +519,8 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
             ProtocolMessage.AuthHandshake(
                 senderId = _uiState.value.localDeviceId,
                 sessionToken = sessionToken,
-                publicKeyBase64 = myPubKeyBase64
-            )
+                publicKeyBase64 = myPubKeyBase64,
+            ),
         )
     }
 
@@ -518,7 +547,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                         _uiState.update {
                             it.copy(
                                 sessionState = SessionState.FAILED,
-                                errorMessage = storageCheck.message
+                                errorMessage = storageCheck.message,
                             )
                         }
                     }
@@ -530,20 +559,21 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                     ProtocolMessage.SessionAccept(
                         receiverId = _uiState.value.localDeviceId,
                         receiverName = _uiState.value.localDeviceName,
-                        verificationCode = request.verificationCode
-                    )
+                        verificationCode = request.verificationCode,
+                    ),
                 )
                 withContext(Dispatchers.Main) {
                     _uiState.update {
                         it.copy(
                             sessionState = SessionState.TRANSFERRING,
                             verificationCode = request.verificationCode,
-                            transferProgress = TransferProgress(
-                                totalFiles = request.files.size,
-                                totalSizeBytes = request.totalSize,
-                                verificationCode = request.verificationCode,
-                                transportType = transport.transportType
-                            )
+                            transferProgress =
+                                TransferProgress(
+                                    totalFiles = request.files.size,
+                                    totalSizeBytes = request.totalSize,
+                                    verificationCode = request.verificationCode,
+                                    transportType = transport.transportType,
+                                ),
                         )
                     }
                     startSpeedTracker()
@@ -563,7 +593,8 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 transport.send(ProtocolMessage.SessionReject("Declined by user"))
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
             withContext(Dispatchers.Main) {
                 resetSessionState()
             }
@@ -575,51 +606,57 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
      */
     private fun listenToIncomingMessages(transport: TransferTransport) {
         messageListenerJob?.cancel()
-        messageListenerJob = viewModelScope.launch(Dispatchers.IO) {
-            try {
-                transport.incomingMessages().collect { message ->
-                    handleProtocolMessage(message, transport)
+        messageListenerJob =
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    transport.incomingMessages().collect { message ->
+                        handleProtocolMessage(message, transport)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Transport stream interrupted: ${e.message}")
+                    handleConnectionLoss()
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "Transport stream interrupted: ${e.message}")
-                handleConnectionLoss()
             }
-        }
     }
 
-    private suspend fun handleProtocolMessage(message: ProtocolMessage, transport: TransferTransport) {
+    private suspend fun handleProtocolMessage(
+        message: ProtocolMessage,
+        transport: TransferTransport,
+    ) {
         when (message) {
             is ProtocolMessage.AuthHandshake -> {
                 // Receiver receives sender's public key
                 val peerPubKeyBytes = Base64.decode(message.publicKeyBase64, Base64.NO_WRAP)
                 sessionToken = message.sessionToken
-                sessionKey = SessionCrypto.deriveSharedSessionKey(
-                    ecKeyPair.private,
-                    peerPubKeyBytes,
-                    salt = sessionToken.toByteArray(Charsets.UTF_8)
-                )
+                sessionKey =
+                    SessionCrypto.deriveSharedSessionKey(
+                        ecKeyPair.private,
+                        peerPubKeyBytes,
+                        salt = sessionToken.toByteArray(Charsets.UTF_8),
+                    )
                 val myPubKeyBase64 = Base64.encodeToString(ecKeyPair.public.encoded, Base64.NO_WRAP)
 
-                val verificationCode = SessionCrypto.deriveVerificationCode(
-                    sessionId = sessionToken,
-                    sharedKeyBytes = sessionKey,
-                    additionalContext = message.senderId + _uiState.value.localDeviceId
-                )
+                val verificationCode =
+                    SessionCrypto.deriveVerificationCode(
+                        sessionId = sessionToken,
+                        sharedKeyBytes = sessionKey,
+                        additionalContext = message.senderId + _uiState.value.localDeviceId,
+                    )
 
                 transport.send(
                     ProtocolMessage.AuthHandshakeAck(
                         receiverId = _uiState.value.localDeviceId,
                         sessionToken = sessionToken,
                         publicKeyBase64 = myPubKeyBase64,
-                        verificationCode = verificationCode
-                    )
+                        verificationCode = verificationCode,
+                    ),
                 )
 
                 withContext(Dispatchers.Main) {
                     _uiState.update {
                         it.copy(
                             verificationCode = verificationCode,
-                            sessionState = SessionState.AUTHENTICATING
+                            sessionState = SessionState.AUTHENTICATING,
                         )
                     }
                 }
@@ -628,17 +665,19 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
             is ProtocolMessage.AuthHandshakeAck -> {
                 // Sender completes ECDH exchange
                 val peerPubKeyBytes = Base64.decode(message.publicKeyBase64, Base64.NO_WRAP)
-                sessionKey = SessionCrypto.deriveSharedSessionKey(
-                    ecKeyPair.private,
-                    peerPubKeyBytes,
-                    salt = sessionToken.toByteArray(Charsets.UTF_8)
-                )
+                sessionKey =
+                    SessionCrypto.deriveSharedSessionKey(
+                        ecKeyPair.private,
+                        peerPubKeyBytes,
+                        salt = sessionToken.toByteArray(Charsets.UTF_8),
+                    )
 
-                val expectedCode = SessionCrypto.deriveVerificationCode(
-                    sessionId = sessionToken,
-                    sharedKeyBytes = sessionKey,
-                    additionalContext = _uiState.value.localDeviceId + message.receiverId
-                )
+                val expectedCode =
+                    SessionCrypto.deriveVerificationCode(
+                        sessionId = sessionToken,
+                        sharedKeyBytes = sessionKey,
+                        additionalContext = _uiState.value.localDeviceId + message.receiverId,
+                    )
 
                 if (expectedCode != message.verificationCode) {
                     Log.w(TAG, "Verification code mismatch: potential MITM attack or key desync!")
@@ -646,7 +685,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                         _uiState.update {
                             it.copy(
                                 sessionState = SessionState.FAILED,
-                                errorMessage = "Security verification failed. Session could not be verified securely."
+                                errorMessage = "Security verification failed. Session could not be verified securely.",
                             )
                         }
                     }
@@ -655,22 +694,23 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 }
 
                 val totalSize = _uiState.value.selectedFiles.sumOf { it.sizeBytes }
-                val metadataList = _uiState.value.selectedFiles.map { f ->
-                    val checksum = storageManager.calculateFileChecksum(f)
-                    ProtocolMessage.FileMetadata(
-                        id = f.id,
-                        name = f.name,
-                        mimeType = f.mimeType,
-                        size = f.sizeBytes,
-                        checksum = checksum
-                    )
-                }
+                val metadataList =
+                    _uiState.value.selectedFiles.map { f ->
+                        val checksum = storageManager.calculateFileChecksum(f)
+                        ProtocolMessage.FileMetadata(
+                            id = f.id,
+                            name = f.name,
+                            mimeType = f.mimeType,
+                            size = f.sizeBytes,
+                            checksum = checksum,
+                        )
+                    }
 
                 withContext(Dispatchers.Main) {
                     _uiState.update {
                         it.copy(
                             verificationCode = message.verificationCode,
-                            sessionState = SessionState.WAITING_FOR_ACCEPT
+                            sessionState = SessionState.WAITING_FOR_ACCEPT,
                         )
                     }
                 }
@@ -682,28 +722,29 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                         totalSize = totalSize,
                         verificationCode = message.verificationCode,
                         files = metadataList,
-                        sessionToken = sessionToken
-                    )
+                        sessionToken = sessionToken,
+                    ),
                 )
             }
 
             is ProtocolMessage.SessionRequest -> {
                 withContext(Dispatchers.Main) {
-                    val incomingFiles = message.files.map {
-                        TransferFile(
-                            id = it.id,
-                            name = it.name,
-                            mimeType = it.mimeType,
-                            sizeBytes = it.size,
-                            checksumSha256 = it.checksum
-                        )
-                    }
+                    val incomingFiles =
+                        message.files.map {
+                            TransferFile(
+                                id = it.id,
+                                name = it.name,
+                                mimeType = it.mimeType,
+                                sizeBytes = it.size,
+                                checksumSha256 = it.checksum,
+                            )
+                        }
                     _uiState.update {
                         it.copy(
                             sessionState = SessionState.WAITING_FOR_ACCEPT,
                             incomingRequest = message,
                             selectedFiles = incomingFiles,
-                            verificationCode = message.verificationCode
+                            verificationCode = message.verificationCode,
                         )
                     }
                 }
@@ -715,12 +756,13 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                     _uiState.update {
                         it.copy(
                             sessionState = SessionState.TRANSFERRING,
-                            transferProgress = TransferProgress(
-                                totalFiles = it.selectedFiles.size,
-                                totalSizeBytes = it.selectedFiles.sumOf { f -> f.sizeBytes },
-                                verificationCode = message.verificationCode,
-                                transportType = transport.transportType
-                            )
+                            transferProgress =
+                                TransferProgress(
+                                    totalFiles = it.selectedFiles.size,
+                                    totalSizeBytes = it.selectedFiles.sumOf { f -> f.sizeBytes },
+                                    verificationCode = message.verificationCode,
+                                    transportType = transport.transportType,
+                                ),
                         )
                     }
                     startSpeedTracker()
@@ -734,7 +776,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                     _uiState.update {
                         it.copy(
                             sessionState = SessionState.FAILED,
-                            errorMessage = message.reason
+                            errorMessage = message.reason,
                         )
                     }
                     recordSessionHistory(status = "FAILED", errorMessage = message.reason)
@@ -744,16 +786,17 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
 
             is ProtocolMessage.SessionResumeRequest -> {
                 // Receiver checks offset of existing part file
-                val existingOffset = storageManager.getExistingPartOffset(
-                    message.lastFileId,
-                    currentReceivingFile?.name ?: ""
-                )
+                val existingOffset =
+                    storageManager.getExistingPartOffset(
+                        message.lastFileId,
+                        currentReceivingFile?.name ?: "",
+                    )
                 transport.send(
                     ProtocolMessage.SessionResumeAck(
                         accepted = true,
                         resumeFileId = message.lastFileId,
-                        resumeOffset = existingOffset
-                    )
+                        resumeOffset = existingOffset,
+                    ),
                 )
             }
 
@@ -782,13 +825,14 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                     _uiState.update {
                         it.copy(
                             sessionState = SessionState.CANCELLED,
-                            errorMessage = "Transfer was cancelled by the other device."
+                            errorMessage = "Transfer was cancelled by the other device.",
                         )
                     }
                     recordSessionHistory(status = "CANCELLED", errorMessage = "Cancelled by peer")
                     cleanupTransport()
                 }
             }
+
             else -> {}
         }
     }
@@ -808,18 +852,22 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
 
         withContext(Dispatchers.Main) {
             _uiState.update { state ->
-                val updatedProgress = state.transferProgress.copy(
-                    currentFileIndex = fileStart.fileIndex,
-                    currentFileName = fileStart.name,
-                    currentFileSize = fileStart.size,
-                    currentFileBytes = fileStart.startOffset
-                )
+                val updatedProgress =
+                    state.transferProgress.copy(
+                        currentFileIndex = fileStart.fileIndex,
+                        currentFileName = fileStart.name,
+                        currentFileSize = fileStart.size,
+                        currentFileBytes = fileStart.startOffset,
+                    )
                 state.copy(transferProgress = updatedProgress)
             }
         }
     }
 
-    private suspend fun handleReceiverChunk(chunk: ProtocolMessage.Chunk, transport: TransferTransport) {
+    private suspend fun handleReceiverChunk(
+        chunk: ProtocolMessage.Chunk,
+        transport: TransferTransport,
+    ) {
         val temp = currentTempFile ?: return
         val receiving = currentReceivingFile ?: return
 
@@ -841,11 +889,12 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        val decrypted = try {
-            SessionCrypto.decryptChunk(chunk.payload, sessionKey)
-        } catch (_: Exception) {
-            chunk.payload
-        }
+        val decrypted =
+            try {
+                SessionCrypto.decryptChunk(chunk.payload, sessionKey)
+            } catch (_: Exception) {
+                chunk.payload
+            }
 
         try {
             storageManager.writeChunkToTempFile(temp, chunk.offset, decrypted)
@@ -855,7 +904,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 _uiState.update {
                     it.copy(
                         sessionState = SessionState.FAILED,
-                        errorMessage = DropSendError.StorageWriteFailed(receiving.name, e).userMessage
+                        errorMessage = DropSendError.StorageWriteFailed(receiving.name, e).userMessage,
                     )
                 }
             }
@@ -867,10 +916,11 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         withContext(Dispatchers.Main) {
             _uiState.update { state ->
                 val prevTotal = state.transferProgress.totalBytesTransferred
-                val newProgress = state.transferProgress.copy(
-                    currentFileBytes = currentFileBytesReceived,
-                    totalBytesTransferred = maxOf(prevTotal, prevTotal + decrypted.size)
-                )
+                val newProgress =
+                    state.transferProgress.copy(
+                        currentFileBytes = currentFileBytesReceived,
+                        totalBytesTransferred = maxOf(prevTotal, prevTotal + decrypted.size),
+                    )
                 state.copy(transferProgress = newProgress)
             }
         }
@@ -880,12 +930,15 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
             ProtocolMessage.ChunkAck(
                 fileId = chunk.fileId,
                 sequence = chunk.sequence,
-                bytesReceived = currentFileBytesReceived
-            )
+                bytesReceived = currentFileBytesReceived,
+            ),
         )
     }
 
-    private suspend fun handleReceiverFileComplete(msg: ProtocolMessage.FileComplete, transport: TransferTransport) {
+    private suspend fun handleReceiverFileComplete(
+        msg: ProtocolMessage.FileComplete,
+        transport: TransferTransport,
+    ) {
         val temp = currentTempFile
         val receiving = currentReceivingFile
 
@@ -894,29 +947,34 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 _uiState.update { it.copy(sessionState = SessionState.VERIFYING) }
             }
 
-            val savedUri = storageManager.finalizeReceivedFile(
-                tempFile = temp,
-                targetFileName = receiving.name,
-                mimeType = receiving.mimeType,
-                expectedChecksum = msg.checksum
-            )
+            val savedUri =
+                storageManager.finalizeReceivedFile(
+                    tempFile = temp,
+                    targetFileName = receiving.name,
+                    mimeType = receiving.mimeType,
+                    expectedChecksum = msg.checksum,
+                )
             val success = savedUri != null
 
             transport.send(ProtocolMessage.FileVerifyAck(fileId = msg.fileId, success = success))
 
             withContext(Dispatchers.Main) {
                 _uiState.update { state ->
-                    val updatedFiles = state.selectedFiles.map { f ->
-                        if (f.id == msg.fileId) f.copy(
-                            status = if (success) FileTransferStatus.COMPLETED else FileTransferStatus.FAILED,
-                            uri = savedUri ?: f.uri
-                        )
-                        else f
-                    }
+                    val updatedFiles =
+                        state.selectedFiles.map { f ->
+                            if (f.id == msg.fileId) {
+                                f.copy(
+                                    status = if (success) FileTransferStatus.COMPLETED else FileTransferStatus.FAILED,
+                                    uri = savedUri ?: f.uri,
+                                )
+                            } else {
+                                f
+                            }
+                        }
                     state.copy(
                         sessionState = SessionState.TRANSFERRING,
                         selectedFiles = updatedFiles,
-                        completedFilesCount = state.completedFilesCount + (if (success) 1 else 0)
+                        completedFilesCount = state.completedFilesCount + (if (success) 1 else 0),
                     )
                 }
             }
@@ -926,128 +984,137 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         currentReceivingFile = null
     }
 
-    private fun startSendingFiles(transport: TransferTransport, resumeIndex: Int = 0, resumeOffset: Long = 0L) {
+    private fun startSendingFiles(
+        transport: TransferTransport,
+        resumeIndex: Int = 0,
+        resumeOffset: Long = 0L,
+    ) {
         transferJob?.cancel()
-        transferJob = viewModelScope.launch(Dispatchers.IO) {
-            val files = _uiState.value.selectedFiles
-            val chunkSize = if (transport.transportType == TransportType.BLUETOOTH) CHUNK_SIZE_BT else CHUNK_SIZE_WIFI
-            var totalBytesSent = _uiState.value.transferProgress.totalBytesTransferred
+        transferJob =
+            viewModelScope.launch(Dispatchers.IO) {
+                val files = _uiState.value.selectedFiles
+                val chunkSize = if (transport.transportType == TransportType.BLUETOOTH) CHUNK_SIZE_BT else CHUNK_SIZE_WIFI
+                var totalBytesSent = _uiState.value.transferProgress.totalBytesTransferred
 
-            for (index in resumeIndex until files.size) {
-                if (!isActive) break
-                val file = files[index]
-                currentTransferFileId = file.id
-                val startOffset = if (index == resumeIndex) resumeOffset else 0L
+                for (index in resumeIndex until files.size) {
+                    if (!isActive) break
+                    val file = files[index]
+                    currentTransferFileId = file.id
+                    val startOffset = if (index == resumeIndex) resumeOffset else 0L
 
-                withContext(Dispatchers.Main) {
-                    _uiState.update { state ->
-                        val updatedFiles = state.selectedFiles.mapIndexed { idx, f ->
-                            if (idx == index) f.copy(status = FileTransferStatus.TRANSFERRING) else f
-                        }
-                        val updatedProgress = state.transferProgress.copy(
-                            currentFileIndex = index,
-                            currentFileName = file.name,
-                            currentFileSize = file.sizeBytes,
-                            currentFileBytes = startOffset
-                        )
-                        state.copy(selectedFiles = updatedFiles, transferProgress = updatedProgress)
-                    }
-                }
-
-                // Send FILE_START with startOffset
-                transport.send(
-                    ProtocolMessage.FileStart(
-                        fileIndex = index,
-                        totalFiles = files.size,
-                        fileId = file.id,
-                        name = file.name,
-                        mimeType = file.mimeType,
-                        size = file.sizeBytes,
-                        checksum = file.checksumSha256,
-                        startOffset = startOffset
-                    )
-                )
-
-                // Stream file chunks
-                val uri = file.uri
-                if (uri != null) {
-                    var stream: InputStream? = null
-                    try {
-                        stream = storageManager.openFileForReading(uri)
-                        if (stream != null) {
-                            if (startOffset > 0) {
-                                stream.skip(startOffset)
-                            }
-                            val buffer = ByteArray(chunkSize)
-                            var sequence = startOffset / chunkSize
-                            var offset = startOffset
-                            var bytesRead: Int
-
-                            while (stream.read(buffer).also { bytesRead = it } != -1 && isActive) {
-                                val chunkPayload = if (bytesRead == buffer.size) buffer else buffer.copyOf(bytesRead)
-                                val encryptedPayload = SessionCrypto.encryptChunk(chunkPayload, sessionKey, sequence)
-
-                                transport.send(
-                                    ProtocolMessage.Chunk(
-                                        fileId = file.id,
-                                        sequence = sequence,
-                                        offset = offset,
-                                        payload = encryptedPayload
-                                    )
+                    withContext(Dispatchers.Main) {
+                        _uiState.update { state ->
+                            val updatedFiles =
+                                state.selectedFiles.mapIndexed { idx, f ->
+                                    if (idx == index) f.copy(status = FileTransferStatus.TRANSFERRING) else f
+                                }
+                            val updatedProgress =
+                                state.transferProgress.copy(
+                                    currentFileIndex = index,
+                                    currentFileName = file.name,
+                                    currentFileSize = file.sizeBytes,
+                                    currentFileBytes = startOffset,
                                 )
+                            state.copy(selectedFiles = updatedFiles, transferProgress = updatedProgress)
+                        }
+                    }
 
-                                sequence++
-                                offset += bytesRead
-                                totalBytesSent += bytesRead
-                                currentTransferOffset = offset
+                    // Send FILE_START with startOffset
+                    transport.send(
+                        ProtocolMessage.FileStart(
+                            fileIndex = index,
+                            totalFiles = files.size,
+                            fileId = file.id,
+                            name = file.name,
+                            mimeType = file.mimeType,
+                            size = file.sizeBytes,
+                            checksum = file.checksumSha256,
+                            startOffset = startOffset,
+                        ),
+                    )
 
-                                val currentOffset = offset
-                                val totalSent = totalBytesSent
-                                withContext(Dispatchers.Main) {
-                                    _uiState.update { state ->
-                                        val newProgress = state.transferProgress.copy(
-                                            currentFileBytes = currentOffset,
-                                            totalBytesTransferred = totalSent
-                                        )
-                                        state.copy(transferProgress = newProgress)
+                    // Stream file chunks
+                    val uri = file.uri
+                    if (uri != null) {
+                        var stream: InputStream? = null
+                        try {
+                            stream = storageManager.openFileForReading(uri)
+                            if (stream != null) {
+                                if (startOffset > 0) {
+                                    stream.skip(startOffset)
+                                }
+                                val buffer = ByteArray(chunkSize)
+                                var sequence = startOffset / chunkSize
+                                var offset = startOffset
+                                var bytesRead: Int
+
+                                while (stream.read(buffer).also { bytesRead = it } != -1 && isActive) {
+                                    val chunkPayload = if (bytesRead == buffer.size) buffer else buffer.copyOf(bytesRead)
+                                    val encryptedPayload = SessionCrypto.encryptChunk(chunkPayload, sessionKey, sequence)
+
+                                    transport.send(
+                                        ProtocolMessage.Chunk(
+                                            fileId = file.id,
+                                            sequence = sequence,
+                                            offset = offset,
+                                            payload = encryptedPayload,
+                                        ),
+                                    )
+
+                                    sequence++
+                                    offset += bytesRead
+                                    totalBytesSent += bytesRead
+                                    currentTransferOffset = offset
+
+                                    val currentOffset = offset
+                                    val totalSent = totalBytesSent
+                                    withContext(Dispatchers.Main) {
+                                        _uiState.update { state ->
+                                            val newProgress =
+                                                state.transferProgress.copy(
+                                                    currentFileBytes = currentOffset,
+                                                    totalBytesTransferred = totalSent,
+                                                )
+                                            state.copy(transferProgress = newProgress)
+                                        }
                                     }
                                 }
                             }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error streaming file ${file.name}", e)
+                        } finally {
+                            stream?.close()
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error streaming file ${file.name}", e)
-                    } finally {
-                        stream?.close()
                     }
-                }
 
-                // Send FILE_COMPLETE
-                transport.send(
-                    ProtocolMessage.FileComplete(
-                        fileId = file.id,
-                        checksum = file.checksumSha256
+                    // Send FILE_COMPLETE
+                    transport.send(
+                        ProtocolMessage.FileComplete(
+                            fileId = file.id,
+                            checksum = file.checksumSha256,
+                        ),
                     )
-                )
 
-                withContext(Dispatchers.Main) {
-                    _uiState.update { state ->
-                        val updatedFiles = state.selectedFiles.mapIndexed { idx, f ->
-                            if (idx == index) f.copy(status = FileTransferStatus.COMPLETED) else f
+                    withContext(Dispatchers.Main) {
+                        _uiState.update { state ->
+                            val updatedFiles =
+                                state.selectedFiles.mapIndexed { idx, f ->
+                                    if (idx == index) f.copy(status = FileTransferStatus.COMPLETED) else f
+                                }
+                            state.copy(
+                                selectedFiles = updatedFiles,
+                                completedFilesCount = index + 1,
+                            )
                         }
-                        state.copy(
-                            selectedFiles = updatedFiles,
-                            completedFilesCount = index + 1
-                        )
                     }
                 }
-            }
 
-            // All files sent!
-            transport.send(ProtocolMessage.TransferComplete)
-            withContext(Dispatchers.Main) {
-                handleTransferComplete()
+                // All files sent!
+                transport.send(ProtocolMessage.TransferComplete)
+                withContext(Dispatchers.Main) {
+                    handleTransferComplete()
+                }
             }
-        }
     }
 
     /**
@@ -1059,85 +1126,86 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         _uiState.update {
             it.copy(
                 transferProgress = it.transferProgress.copy(isReconnecting = true),
-                statusMessage = "Connection lost. Attempting to resume transfer..."
+                statusMessage = "Connection lost. Attempting to resume transfer...",
             )
         }
 
         reconnectJob?.cancel()
-        reconnectJob = viewModelScope.launch(Dispatchers.IO) {
-            val target = _uiState.value.targetDevice
-            val role = _uiState.value.role
+        reconnectJob =
+            viewModelScope.launch(Dispatchers.IO) {
+                val target = _uiState.value.targetDevice
+                val role = _uiState.value.role
 
-            if (target == null || role != SharingRole.SENDER) {
-                // Receiver waits in background or cleans up on timeout
-                delay(15_000)
-                if (_uiState.value.transferProgress.isReconnecting) {
+                if (target == null || role != SharingRole.SENDER) {
+                    // Receiver waits in background or cleans up on timeout
+                    delay(15_000)
+                    if (_uiState.value.transferProgress.isReconnecting) {
+                        withContext(Dispatchers.Main) {
+                            _uiState.update {
+                                it.copy(
+                                    sessionState = SessionState.FAILED,
+                                    errorMessage = "Transfer connection timed out.",
+                                )
+                            }
+                            recordSessionHistory(status = "FAILED", errorMessage = "Connection timed out")
+                        }
+                    }
+                    return@launch
+                }
+
+                var reconnected = false
+                for (attempt in 1..MAX_RECONNECT_ATTEMPTS) {
+                    _uiState.update {
+                        it.copy(statusMessage = "Reconnecting to ${target.name} (Attempt $attempt/$MAX_RECONNECT_ATTEMPTS)...")
+                    }
+                    delay(attempt * 2000L) // Exponential backoff
+
+                    try {
+                        val newTransport = TcpTransferTransport(target.transportType)
+                        newTransport.connect(target.ipAddress ?: "127.0.0.1", target.port)
+                        activeTransport = newTransport
+                        listenToIncomingMessages(newTransport)
+
+                        // Send Resume Request
+                        newTransport.send(
+                            ProtocolMessage.SessionResumeRequest(
+                                sessionToken = sessionToken,
+                                lastFileId = currentTransferFileId,
+                                confirmedOffset = currentTransferOffset,
+                            ),
+                        )
+
+                        reconnected = true
+                        withContext(Dispatchers.Main) {
+                            _uiState.update {
+                                it.copy(
+                                    statusMessage = "Reconnected! Resuming transfer...",
+                                    transferProgress = it.transferProgress.copy(isReconnecting = false),
+                                )
+                            }
+                        }
+
+                        val currentIndex = _uiState.value.transferProgress.currentFileIndex
+                        startSendingFiles(newTransport, resumeIndex = currentIndex, resumeOffset = currentTransferOffset)
+                        break
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Reconnect attempt $attempt failed: ${e.message}")
+                    }
+                }
+
+                if (!reconnected) {
                     withContext(Dispatchers.Main) {
                         _uiState.update {
                             it.copy(
                                 sessionState = SessionState.FAILED,
-                                errorMessage = "Transfer connection timed out."
+                                errorMessage = DropSendError.ReconnectFailed().userMessage,
+                                transferProgress = it.transferProgress.copy(isReconnecting = false),
                             )
                         }
-                        recordSessionHistory(status = "FAILED", errorMessage = "Connection timed out")
+                        recordSessionHistory(status = "FAILED", errorMessage = "Failed reconnecting")
                     }
                 }
-                return@launch
             }
-
-            var reconnected = false
-            for (attempt in 1..MAX_RECONNECT_ATTEMPTS) {
-                _uiState.update {
-                    it.copy(statusMessage = "Reconnecting to ${target.name} (Attempt $attempt/$MAX_RECONNECT_ATTEMPTS)...")
-                }
-                delay(attempt * 2000L) // Exponential backoff
-
-                try {
-                    val newTransport = TcpTransferTransport(target.transportType)
-                    newTransport.connect(target.ipAddress ?: "127.0.0.1", target.port)
-                    activeTransport = newTransport
-                    listenToIncomingMessages(newTransport)
-
-                    // Send Resume Request
-                    newTransport.send(
-                        ProtocolMessage.SessionResumeRequest(
-                            sessionToken = sessionToken,
-                            lastFileId = currentTransferFileId,
-                            confirmedOffset = currentTransferOffset
-                        )
-                    )
-
-                    reconnected = true
-                    withContext(Dispatchers.Main) {
-                        _uiState.update {
-                            it.copy(
-                                statusMessage = "Reconnected! Resuming transfer...",
-                                transferProgress = it.transferProgress.copy(isReconnecting = false)
-                            )
-                        }
-                    }
-
-                    val currentIndex = _uiState.value.transferProgress.currentFileIndex
-                    startSendingFiles(newTransport, resumeIndex = currentIndex, resumeOffset = currentTransferOffset)
-                    break
-                } catch (e: Exception) {
-                    Log.w(TAG, "Reconnect attempt $attempt failed: ${e.message}")
-                }
-            }
-
-            if (!reconnected) {
-                withContext(Dispatchers.Main) {
-                    _uiState.update {
-                        it.copy(
-                            sessionState = SessionState.FAILED,
-                            errorMessage = DropSendError.ReconnectFailed().userMessage,
-                            transferProgress = it.transferProgress.copy(isReconnecting = false)
-                        )
-                    }
-                    recordSessionHistory(status = "FAILED", errorMessage = "Failed reconnecting")
-                }
-            }
-        }
     }
 
     private fun handleTransferComplete() {
@@ -1147,13 +1215,16 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         _uiState.update {
             it.copy(
                 sessionState = SessionState.COMPLETED,
-                totalTransferredBytes = it.transferProgress.totalBytesTransferred
+                totalTransferredBytes = it.transferProgress.totalBytesTransferred,
             )
         }
         recordSessionHistory(status = "COMPLETED")
     }
 
-    private fun recordSessionHistory(status: String, errorMessage: String? = null) {
+    private fun recordSessionHistory(
+        status: String,
+        errorMessage: String? = null,
+    ) {
         val state = _uiState.value
         val isSending = state.role == SharingRole.SENDER
         val peerName = state.targetDevice?.name ?: state.incomingRequest?.senderName ?: "Nearby Device"
@@ -1176,8 +1247,8 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                         durationSeconds = state.sessionDurationSeconds,
                         averageSpeedBps = state.transferProgress.speedBytesPerSec,
                         fileUriString = file.uri?.toString(),
-                        errorMessage = errorMessage
-                    )
+                        errorMessage = errorMessage,
+                    ),
                 )
             }
         }
@@ -1201,39 +1272,41 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         smoothedSpeedBps = 0.0
 
         speedCalcJob?.cancel()
-        speedCalcJob = viewModelScope.launch {
-            while (isActive) {
-                delay(1000)
-                val currentBytes = _uiState.value.transferProgress.totalBytesTransferred
-                val currentTime = System.currentTimeMillis()
-                val elapsedSec = ((currentTime - lastMeasuredTime) / 1000.0).coerceAtLeast(0.1)
-                val bytesDiff = (currentBytes - lastMeasuredBytes).coerceAtLeast(0)
+        speedCalcJob =
+            viewModelScope.launch {
+                while (isActive) {
+                    delay(1000)
+                    val currentBytes = _uiState.value.transferProgress.totalBytesTransferred
+                    val currentTime = System.currentTimeMillis()
+                    val elapsedSec = ((currentTime - lastMeasuredTime) / 1000.0).coerceAtLeast(0.1)
+                    val bytesDiff = (currentBytes - lastMeasuredBytes).coerceAtLeast(0)
 
-                val instantSpeed = bytesDiff / elapsedSec
-                smoothedSpeedBps = if (smoothedSpeedBps == 0.0) instantSpeed else (0.35 * instantSpeed + 0.65 * smoothedSpeedBps)
-                val speedBps = smoothedSpeedBps.toLong().coerceAtLeast(0L)
+                    val instantSpeed = bytesDiff / elapsedSec
+                    smoothedSpeedBps = if (smoothedSpeedBps == 0.0) instantSpeed else (0.35 * instantSpeed + 0.65 * smoothedSpeedBps)
+                    val speedBps = smoothedSpeedBps.toLong().coerceAtLeast(0L)
 
-                val totalBytes = _uiState.value.transferProgress.totalSizeBytes
-                val remainingBytes = (totalBytes - currentBytes).coerceAtLeast(0)
-                val eta = if (speedBps > 0) remainingBytes / speedBps else 0L
+                    val totalBytes = _uiState.value.transferProgress.totalSizeBytes
+                    val remainingBytes = (totalBytes - currentBytes).coerceAtLeast(0)
+                    val eta = if (speedBps > 0) remainingBytes / speedBps else 0L
 
-                lastMeasuredBytes = currentBytes
-                lastMeasuredTime = currentTime
+                    lastMeasuredBytes = currentBytes
+                    lastMeasuredTime = currentTime
 
-                _uiState.update { state ->
-                    val updated = state.transferProgress.copy(
-                        speedBytesPerSec = speedBps,
-                        etaSeconds = eta
-                    )
-                    state.copy(
-                        transferProgress = updated,
-                        sessionDurationSeconds = state.sessionDurationSeconds + 1
-                    )
+                    _uiState.update { state ->
+                        val updated =
+                            state.transferProgress.copy(
+                                speedBytesPerSec = speedBps,
+                                etaSeconds = eta,
+                            )
+                        state.copy(
+                            transferProgress = updated,
+                            sessionDurationSeconds = state.sessionDurationSeconds + 1,
+                        )
+                    }
+
+                    DropSendTransferService.start(getApplication())
                 }
-
-                DropSendTransferService.start(getApplication())
             }
-        }
     }
 
     fun pauseTransfer() {
@@ -1262,7 +1335,8 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 activeTransport?.send(ProtocolMessage.TransferCancel)
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
             cleanupTransport()
             storageManager.clearTempFiles()
             hapticHelper.performTransferFailed()
@@ -1271,7 +1345,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 _uiState.update {
                     it.copy(
                         sessionState = SessionState.CANCELLED,
-                        errorMessage = "Transfer cancelled"
+                        errorMessage = "Transfer cancelled",
                     )
                 }
             }
@@ -1281,98 +1355,100 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
     // Simulation Engine
     private var simulationJob: Job? = null
 
-    fun generateMockFiles(): List<TransferFile> {
-        return listOf(
+    fun generateMockFiles(): List<TransferFile> =
+        listOf(
             TransferFile(
                 id = "mock-1",
                 name = "4K_Vacation_Drone_Clip.mp4",
                 mimeType = "video/mp4",
                 sizeBytes = 54_800_000L,
-                checksumSha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                checksumSha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             ),
             TransferFile(
                 id = "mock-2",
                 name = "Project_Assets_2026.zip",
                 mimeType = "application/zip",
                 sizeBytes = 22_400_000L,
-                checksumSha256 = "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4"
+                checksumSha256 = "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
             ),
             TransferFile(
                 id = "mock-3",
                 name = "Quarterly_Financial_Report.pdf",
                 mimeType = "application/pdf",
                 sizeBytes = 3_750_000L,
-                checksumSha256 = "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+                checksumSha256 = "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
             ),
             TransferFile(
                 id = "mock-4",
                 name = "HDR_Nature_Photos.tar",
                 mimeType = "application/x-tar",
                 sizeBytes = 14_200_000L,
-                checksumSha256 = "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
-            )
+                checksumSha256 = "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+            ),
         )
-    }
 
     fun populateDemoPeers() {
-        val peers = listOf(
-            DiscoveredDevice(
-                id = "DROP-9A14",
-                name = "Pixel 9 Pro (Wi-Fi Direct)",
-                transportType = TransportType.WIFI_DIRECT,
-                ipAddress = "192.168.43.1",
-                port = 8888,
-                isReadyToReceive = true
-            ),
-            DiscoveredDevice(
-                id = "DROP-3B88",
-                name = "Galaxy S24 Ultra (Local LAN)",
-                transportType = TransportType.LOCAL_WIFI,
-                ipAddress = "192.168.1.105",
-                port = 8888,
-                isReadyToReceive = true
-            ),
-            DiscoveredDevice(
-                id = "DROP-7F20",
-                name = "Nothing Phone 2 (Bluetooth)",
-                transportType = TransportType.BLUETOOTH,
-                bluetoothAddress = "00:11:22:33:AA:BB",
-                isReadyToReceive = true
-            ),
-            DiscoveredDevice(
-                id = "DROP-4C61",
-                name = "MacBook Pro M3 (LAN Bridge)",
-                transportType = TransportType.LOCAL_WIFI,
-                ipAddress = "192.168.1.42",
-                port = 8888,
-                isReadyToReceive = true
+        val peers =
+            listOf(
+                DiscoveredDevice(
+                    id = "DROP-9A14",
+                    name = "Pixel 9 Pro (Wi-Fi Direct)",
+                    transportType = TransportType.WIFI_DIRECT,
+                    ipAddress = "192.168.43.1",
+                    port = 8888,
+                    isReadyToReceive = true,
+                ),
+                DiscoveredDevice(
+                    id = "DROP-3B88",
+                    name = "Galaxy S24 Ultra (Local LAN)",
+                    transportType = TransportType.LOCAL_WIFI,
+                    ipAddress = "192.168.1.105",
+                    port = 8888,
+                    isReadyToReceive = true,
+                ),
+                DiscoveredDevice(
+                    id = "DROP-7F20",
+                    name = "Nothing Phone 2 (Bluetooth)",
+                    transportType = TransportType.BLUETOOTH,
+                    bluetoothAddress = "00:11:22:33:AA:BB",
+                    isReadyToReceive = true,
+                ),
+                DiscoveredDevice(
+                    id = "DROP-4C61",
+                    name = "MacBook Pro M3 (LAN Bridge)",
+                    transportType = TransportType.LOCAL_WIFI,
+                    ipAddress = "192.168.1.42",
+                    port = 8888,
+                    isReadyToReceive = true,
+                ),
             )
-        )
         _uiState.update { it.copy(nearbyDevices = peers) }
     }
 
     fun launchSenderSimulation(
         targetDevice: DiscoveredDevice? = null,
         speedMBps: Float = 50f,
-        customFiles: List<TransferFile>? = null
+        customFiles: List<TransferFile>? = null,
     ) {
         resetSessionState()
 
-        val device = targetDevice ?: DiscoveredDevice(
-            id = "DROP-9A14",
-            name = "Pixel 9 Pro (Virtual Peer)",
-            transportType = TransportType.WIFI_DIRECT,
-            ipAddress = "192.168.43.1",
-            port = 8888
-        )
+        val device =
+            targetDevice ?: DiscoveredDevice(
+                id = "DROP-9A14",
+                name = "Pixel 9 Pro (Virtual Peer)",
+                transportType = TransportType.WIFI_DIRECT,
+                ipAddress = "192.168.43.1",
+                port = 8888,
+            )
 
-        val files = if (!customFiles.isNullOrEmpty()) {
-            customFiles
-        } else if (_uiState.value.selectedFiles.isNotEmpty()) {
-            _uiState.value.selectedFiles
-        } else {
-            generateMockFiles()
-        }
+        val files =
+            if (!customFiles.isNullOrEmpty()) {
+                customFiles
+            } else if (_uiState.value.selectedFiles.isNotEmpty()) {
+                _uiState.value.selectedFiles
+            } else {
+                generateMockFiles()
+            }
 
         val totalBytes = files.sumOf { it.sizeBytes }
         val code = SessionCrypto.deriveVerificationCode(device.id, sessionKey)
@@ -1384,42 +1460,44 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 selectedFiles = files,
                 verificationCode = code,
                 sessionState = SessionState.CONNECTING,
-                statusMessage = "Connecting to ${device.name}..."
+                statusMessage = "Connecting to ${device.name}...",
             )
         }
 
         simulationJob?.cancel()
-        simulationJob = viewModelScope.launch(Dispatchers.Default) {
-            delay(500)
-            _uiState.update {
-                it.copy(
-                    sessionState = SessionState.AUTHENTICATING,
-                    statusMessage = "Handshake verified! Code: $code"
-                )
-            }
-            delay(500)
-            hapticHelper.performTransferStart()
-            _uiState.update {
-                it.copy(
-                    sessionState = SessionState.TRANSFERRING,
-                    statusMessage = null,
-                    transferProgress = TransferProgress(
-                        totalFiles = files.size,
-                        totalSizeBytes = totalBytes,
-                        verificationCode = code,
-                        transportType = device.transportType
+        simulationJob =
+            viewModelScope.launch(Dispatchers.Default) {
+                delay(500)
+                _uiState.update {
+                    it.copy(
+                        sessionState = SessionState.AUTHENTICATING,
+                        statusMessage = "Handshake verified! Code: $code",
                     )
-                )
-            }
+                }
+                delay(500)
+                hapticHelper.performTransferStart()
+                _uiState.update {
+                    it.copy(
+                        sessionState = SessionState.TRANSFERRING,
+                        statusMessage = null,
+                        transferProgress =
+                            TransferProgress(
+                                totalFiles = files.size,
+                                totalSizeBytes = totalBytes,
+                                verificationCode = code,
+                                transportType = device.transportType,
+                            ),
+                    )
+                }
 
-            runSimulatedStreamingTransfer(files, speedMBps)
-        }
+                runSimulatedStreamingTransfer(files, speedMBps)
+            }
     }
 
     fun launchReceiverSimulation(
         senderName: String = "Pixel 9 Pro (Simulated)",
         speedMBps: Float = 50f,
-        customFiles: List<TransferFile>? = null
+        customFiles: List<TransferFile>? = null,
     ) {
         resetSessionState()
 
@@ -1427,21 +1505,23 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         val totalBytes = files.sumOf { it.sizeBytes }
         val code = SessionCrypto.deriveVerificationCode("DROP-9A14", sessionKey)
 
-        val mockRequest = ProtocolMessage.SessionRequest(
-            senderId = "DROP-9A14",
-            senderName = senderName,
-            files = files.map { f ->
-                ProtocolMessage.FileMetadata(
-                    id = f.id,
-                    name = f.name,
-                    size = f.sizeBytes,
-                    mimeType = f.mimeType,
-                    checksum = f.checksumSha256
-                )
-            },
-            totalSize = totalBytes,
-            verificationCode = code
-        )
+        val mockRequest =
+            ProtocolMessage.SessionRequest(
+                senderId = "DROP-9A14",
+                senderName = senderName,
+                files =
+                    files.map { f ->
+                        ProtocolMessage.FileMetadata(
+                            id = f.id,
+                            name = f.name,
+                            size = f.sizeBytes,
+                            mimeType = f.mimeType,
+                            checksum = f.checksumSha256,
+                        )
+                    },
+                totalSize = totalBytes,
+                verificationCode = code,
+            )
 
         _uiState.update {
             it.copy(
@@ -1450,11 +1530,12 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 incomingRequest = mockRequest,
                 selectedFiles = files,
                 verificationCode = code,
-                targetDevice = DiscoveredDevice(
-                    id = "DROP-9A14",
-                    name = senderName,
-                    transportType = TransportType.WIFI_DIRECT
-                )
+                targetDevice =
+                    DiscoveredDevice(
+                        id = "DROP-9A14",
+                        name = senderName,
+                        transportType = TransportType.WIFI_DIRECT,
+                    ),
             )
         }
     }
@@ -1467,22 +1548,27 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         _uiState.update {
             it.copy(
                 sessionState = SessionState.TRANSFERRING,
-                transferProgress = TransferProgress(
-                    totalFiles = files.size,
-                    totalSizeBytes = totalBytes,
-                    verificationCode = code,
-                    transportType = TransportType.WIFI_DIRECT
-                )
+                transferProgress =
+                    TransferProgress(
+                        totalFiles = files.size,
+                        totalSizeBytes = totalBytes,
+                        verificationCode = code,
+                        transportType = TransportType.WIFI_DIRECT,
+                    ),
             )
         }
 
         simulationJob?.cancel()
-        simulationJob = viewModelScope.launch(Dispatchers.Default) {
-            runSimulatedStreamingTransfer(files, speedMBps)
-        }
+        simulationJob =
+            viewModelScope.launch(Dispatchers.Default) {
+                runSimulatedStreamingTransfer(files, speedMBps)
+            }
     }
 
-    private suspend fun runSimulatedStreamingTransfer(files: List<TransferFile>, speedMBps: Float) {
+    private suspend fun runSimulatedStreamingTransfer(
+        files: List<TransferFile>,
+        speedMBps: Float,
+    ) {
         val totalBytes = files.sumOf { it.sizeBytes }
         var totalBytesTransferred = 0L
         val bytesPerSec = (speedMBps * 1024 * 1024).toLong().coerceAtLeast(512 * 1024)
@@ -1494,19 +1580,21 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
             var fileBytesTransferred = 0L
 
             _uiState.update { state ->
-                val updatedProgress = state.transferProgress.copy(
-                    currentFileIndex = index,
-                    currentFileName = file.name,
-                    currentFileSize = file.sizeBytes,
-                    currentFileBytes = 0L,
-                    speedBytesPerSec = bytesPerSec
-                )
-                val updatedFiles = state.selectedFiles.mapIndexed { i, f ->
-                    if (i == index) f.copy(status = FileTransferStatus.TRANSFERRING) else f
-                }
+                val updatedProgress =
+                    state.transferProgress.copy(
+                        currentFileIndex = index,
+                        currentFileName = file.name,
+                        currentFileSize = file.sizeBytes,
+                        currentFileBytes = 0L,
+                        speedBytesPerSec = bytesPerSec,
+                    )
+                val updatedFiles =
+                    state.selectedFiles.mapIndexed { i, f ->
+                        if (i == index) f.copy(status = FileTransferStatus.TRANSFERRING) else f
+                    }
                 state.copy(
                     transferProgress = updatedProgress,
-                    selectedFiles = updatedFiles
+                    selectedFiles = updatedFiles,
                 )
             }
 
@@ -1530,12 +1618,13 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
                 val currentTBytes = totalBytesTransferred
 
                 _uiState.update { state ->
-                    val newProgress = state.transferProgress.copy(
-                        currentFileBytes = currentFBytes,
-                        totalBytesTransferred = currentTBytes,
-                        speedBytesPerSec = bytesPerSec,
-                        etaSeconds = etaSec
-                    )
+                    val newProgress =
+                        state.transferProgress.copy(
+                            currentFileBytes = currentFBytes,
+                            totalBytesTransferred = currentTBytes,
+                            speedBytesPerSec = bytesPerSec,
+                            etaSeconds = etaSec,
+                        )
                     state.copy(transferProgress = newProgress)
                 }
 
@@ -1544,16 +1633,21 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
 
             val accessibleUri = file.uri ?: storageManager.createAndSaveDemoFile(file.name, file.mimeType)
             _uiState.update { state ->
-                val updatedFiles = state.selectedFiles.mapIndexed { i, f ->
-                    if (i == index) f.copy(
-                        status = FileTransferStatus.COMPLETED,
-                        bytesTransferred = f.sizeBytes,
-                        uri = accessibleUri ?: f.uri
-                    ) else f
-                }
+                val updatedFiles =
+                    state.selectedFiles.mapIndexed { i, f ->
+                        if (i == index) {
+                            f.copy(
+                                status = FileTransferStatus.COMPLETED,
+                                bytesTransferred = f.sizeBytes,
+                                uri = accessibleUri ?: f.uri,
+                            )
+                        } else {
+                            f
+                        }
+                    }
                 state.copy(
                     selectedFiles = updatedFiles,
-                    completedFilesCount = index + 1
+                    completedFilesCount = index + 1,
                 )
             }
             delay(120)
@@ -1567,7 +1661,7 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
             it.copy(
                 sessionState = SessionState.COMPLETED,
                 totalTransferredBytes = totalBytes,
-                sessionDurationSeconds = (totalBytes / bytesPerSec).coerceAtLeast(2L)
+                sessionDurationSeconds = (totalBytes / bytesPerSec).coerceAtLeast(2L),
             )
         }
         recordSessionHistory(status = "COMPLETED")
@@ -1607,29 +1701,31 @@ class DropSendViewModel(application: Application) : AndroidViewModel(application
         ecKeyPair = SessionCrypto.generateEcKeyPair()
         val newId = SessionCrypto.generateTemporaryIdentity()
 
-        _uiState.value = UiState(
-            sessionState = SessionState.IDLE,
-            role = null,
-            localDeviceId = newId,
-            localDeviceName = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
-            selectedFiles = emptyList(),
-            nearbyDevices = emptyList(),
-            targetDevice = null,
-            incomingRequest = null,
-            verificationCode = "",
-            transferProgress = TransferProgress(),
-            errorMessage = null,
-            completedFilesCount = 0,
-            totalTransferredBytes = 0L,
-            sessionDurationSeconds = 0L
-        )
+        _uiState.value =
+            UiState(
+                sessionState = SessionState.IDLE,
+                role = null,
+                localDeviceId = newId,
+                localDeviceName = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
+                selectedFiles = emptyList(),
+                nearbyDevices = emptyList(),
+                targetDevice = null,
+                incomingRequest = null,
+                verificationCode = "",
+                transferProgress = TransferProgress(),
+                errorMessage = null,
+                completedFilesCount = 0,
+                totalTransferredBytes = 0L,
+                sessionDurationSeconds = 0L,
+            )
     }
 
     private fun cleanupTransport() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 activeTransport?.disconnect()
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
             activeTransport = null
         }
     }

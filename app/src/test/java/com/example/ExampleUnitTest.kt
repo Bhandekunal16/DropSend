@@ -18,7 +18,6 @@ import javax.crypto.AEADBadTagException
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class ExampleUnitTest {
-
     // ==========================================
     // P0-1: Secure Session Key Exchange & Authentication
     // ==========================================
@@ -30,30 +29,34 @@ class ExampleUnitTest {
         val sessionToken = SessionCrypto.generateSessionToken()
         val salt = sessionToken.toByteArray(Charsets.UTF_8)
 
-        val aliceSharedKey = SessionCrypto.deriveSharedSessionKey(
-            aliceKeyPair.private,
-            bobKeyPair.public.encoded,
-            salt = salt
-        )
-        val bobSharedKey = SessionCrypto.deriveSharedSessionKey(
-            bobKeyPair.private,
-            aliceKeyPair.public.encoded,
-            salt = salt
-        )
+        val aliceSharedKey =
+            SessionCrypto.deriveSharedSessionKey(
+                aliceKeyPair.private,
+                bobKeyPair.public.encoded,
+                salt = salt,
+            )
+        val bobSharedKey =
+            SessionCrypto.deriveSharedSessionKey(
+                bobKeyPair.private,
+                aliceKeyPair.public.encoded,
+                salt = salt,
+            )
 
         assertArrayEquals("Shared keys derived by Alice and Bob via ECDH + HKDF must match", aliceSharedKey, bobSharedKey)
         assertEquals(32, aliceSharedKey.size) // 256 bits
 
-        val aliceCode = SessionCrypto.deriveVerificationCode(
-            sessionId = sessionToken,
-            sharedKeyBytes = aliceSharedKey,
-            additionalContext = "DROP-ALICE" + "DROP-BOB"
-        )
-        val bobCode = SessionCrypto.deriveVerificationCode(
-            sessionId = sessionToken,
-            sharedKeyBytes = bobSharedKey,
-            additionalContext = "DROP-ALICE" + "DROP-BOB"
-        )
+        val aliceCode =
+            SessionCrypto.deriveVerificationCode(
+                sessionId = sessionToken,
+                sharedKeyBytes = aliceSharedKey,
+                additionalContext = "DROP-ALICE" + "DROP-BOB",
+            )
+        val bobCode =
+            SessionCrypto.deriveVerificationCode(
+                sessionId = sessionToken,
+                sharedKeyBytes = bobSharedKey,
+                additionalContext = "DROP-ALICE" + "DROP-BOB",
+            )
         assertEquals("Verification codes (SAS) must be identical on both peers", aliceCode, bobCode)
         assertTrue("Verification code format must be 4-digit grouped (e.g. 'XX YY')", aliceCode.matches(Regex("\\d{2} \\d{2}")))
     }
@@ -166,9 +169,10 @@ class ExampleUnitTest {
         val unique1 = StorageManager.resolveUniqueFileName("photo.jpg") { false }
         assertEquals("photo.jpg", unique1)
 
-        val unique2 = StorageManager.resolveUniqueFileName("photo.jpg") { name ->
-            name == "photo.jpg" || name == "photo (1).jpg"
-        }
+        val unique2 =
+            StorageManager.resolveUniqueFileName("photo.jpg") { name ->
+                name == "photo.jpg" || name == "photo (1).jpg"
+            }
         assertEquals("photo (2).jpg", unique2)
     }
 
@@ -178,11 +182,12 @@ class ExampleUnitTest {
 
     @Test
     fun testProtocolMessageSerialization() {
-        val authHandshake = ProtocolMessage.AuthHandshake(
-            senderId = "DROP-TEST",
-            sessionToken = "sess-12345",
-            publicKeyBase64 = "base64testkey"
-        )
+        val authHandshake =
+            ProtocolMessage.AuthHandshake(
+                senderId = "DROP-TEST",
+                sessionToken = "sess-12345",
+                publicKeyBase64 = "base64testkey",
+            )
 
         val bos = ByteArrayOutputStream()
         ProtocolMessage.writeToStream(bos, authHandshake)
@@ -201,12 +206,13 @@ class ExampleUnitTest {
     @Test
     fun testChunkMessageSerialization() {
         val payload = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
-        val chunk = ProtocolMessage.Chunk(
-            fileId = "file-101",
-            sequence = 7L,
-            offset = 1024L,
-            payload = payload
-        )
+        val chunk =
+            ProtocolMessage.Chunk(
+                fileId = "file-101",
+                sequence = 7L,
+                offset = 1024L,
+                payload = payload,
+            )
 
         val bos = ByteArrayOutputStream()
         chunk.writeToStream(bos)
@@ -225,11 +231,12 @@ class ExampleUnitTest {
 
     @Test
     fun testSessionResumeRequestAndAckSerialization() {
-        val req = ProtocolMessage.SessionResumeRequest(
-            sessionToken = "sess-token-abc",
-            lastFileId = "file-77",
-            confirmedOffset = 81920L
-        )
+        val req =
+            ProtocolMessage.SessionResumeRequest(
+                sessionToken = "sess-token-abc",
+                lastFileId = "file-77",
+                confirmedOffset = 81920L,
+            )
 
         val bos = ByteArrayOutputStream()
         req.writeToStream(bos)
@@ -250,72 +257,109 @@ class ExampleUnitTest {
     @Test
     fun testTransferStateMachineLegalTransitions() {
         // IDLE -> DISCOVERING
-        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
-            com.example.domain.model.SessionState.IDLE,
-            com.example.domain.model.SessionState.DISCOVERING
-        ))
+        assertTrue(
+            com.example.domain.model.TransferStateMachine.isLegalTransition(
+                com.example.domain.model.SessionState.IDLE,
+                com.example.domain.model.SessionState.DISCOVERING,
+            ),
+        )
 
         // CONNECTING -> AUTHENTICATING -> WAITING_FOR_ACCEPT -> TRANSFERRING -> VERIFYING -> COMPLETED
-        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
-            com.example.domain.model.SessionState.CONNECTING,
-            com.example.domain.model.SessionState.AUTHENTICATING
-        ))
-        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
-            com.example.domain.model.SessionState.AUTHENTICATING,
-            com.example.domain.model.SessionState.WAITING_FOR_ACCEPT
-        ))
-        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
-            com.example.domain.model.SessionState.WAITING_FOR_ACCEPT,
-            com.example.domain.model.SessionState.TRANSFERRING
-        ))
-        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
-            com.example.domain.model.SessionState.TRANSFERRING,
-            com.example.domain.model.SessionState.VERIFYING
-        ))
-        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
-            com.example.domain.model.SessionState.VERIFYING,
-            com.example.domain.model.SessionState.COMPLETED
-        ))
+        assertTrue(
+            com.example.domain.model.TransferStateMachine.isLegalTransition(
+                com.example.domain.model.SessionState.CONNECTING,
+                com.example.domain.model.SessionState.AUTHENTICATING,
+            ),
+        )
+        assertTrue(
+            com.example.domain.model.TransferStateMachine.isLegalTransition(
+                com.example.domain.model.SessionState.AUTHENTICATING,
+                com.example.domain.model.SessionState.WAITING_FOR_ACCEPT,
+            ),
+        )
+        assertTrue(
+            com.example.domain.model.TransferStateMachine.isLegalTransition(
+                com.example.domain.model.SessionState.WAITING_FOR_ACCEPT,
+                com.example.domain.model.SessionState.TRANSFERRING,
+            ),
+        )
+        assertTrue(
+            com.example.domain.model.TransferStateMachine.isLegalTransition(
+                com.example.domain.model.SessionState.TRANSFERRING,
+                com.example.domain.model.SessionState.VERIFYING,
+            ),
+        )
+        assertTrue(
+            com.example.domain.model.TransferStateMachine.isLegalTransition(
+                com.example.domain.model.SessionState.VERIFYING,
+                com.example.domain.model.SessionState.COMPLETED,
+            ),
+        )
 
         // Cancellation and Disconnection
-        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
-            com.example.domain.model.SessionState.TRANSFERRING,
-            com.example.domain.model.SessionState.CANCELLED
-        ))
-        assertTrue(com.example.domain.model.TransferStateMachine.isLegalTransition(
-            com.example.domain.model.SessionState.TRANSFERRING,
-            com.example.domain.model.SessionState.DISCONNECTED
-        ))
+        assertTrue(
+            com.example.domain.model.TransferStateMachine.isLegalTransition(
+                com.example.domain.model.SessionState.TRANSFERRING,
+                com.example.domain.model.SessionState.CANCELLED,
+            ),
+        )
+        assertTrue(
+            com.example.domain.model.TransferStateMachine.isLegalTransition(
+                com.example.domain.model.SessionState.TRANSFERRING,
+                com.example.domain.model.SessionState.DISCONNECTED,
+            ),
+        )
     }
 
     @Test
     fun testTransferStateMachineIllegalTransitions() {
         // Cannot jump directly from COMPLETED to TRANSFERRING
-        assertFalse(com.example.domain.model.TransferStateMachine.isLegalTransition(
-            com.example.domain.model.SessionState.COMPLETED,
-            com.example.domain.model.SessionState.TRANSFERRING
-        ))
+        assertFalse(
+            com.example.domain.model.TransferStateMachine.isLegalTransition(
+                com.example.domain.model.SessionState.COMPLETED,
+                com.example.domain.model.SessionState.TRANSFERRING,
+            ),
+        )
 
         // Cannot jump directly from IDLE to VERIFYING
-        assertFalse(com.example.domain.model.TransferStateMachine.isLegalTransition(
-            com.example.domain.model.SessionState.IDLE,
-            com.example.domain.model.SessionState.VERIFYING
-        ))
+        assertFalse(
+            com.example.domain.model.TransferStateMachine.isLegalTransition(
+                com.example.domain.model.SessionState.IDLE,
+                com.example.domain.model.SessionState.VERIFYING,
+            ),
+        )
 
         // Cannot jump directly from CANCELLED to TRANSFERRING
-        assertFalse(com.example.domain.model.TransferStateMachine.isLegalTransition(
-            com.example.domain.model.SessionState.CANCELLED,
-            com.example.domain.model.SessionState.TRANSFERRING
-        ))
+        assertFalse(
+            com.example.domain.model.TransferStateMachine.isLegalTransition(
+                com.example.domain.model.SessionState.CANCELLED,
+                com.example.domain.model.SessionState.TRANSFERRING,
+            ),
+        )
     }
 
     @Test
     fun testTransferStateMachineTerminalStates() {
-        assertTrue(com.example.domain.model.TransferStateMachine.isTerminal(com.example.domain.model.SessionState.COMPLETED))
-        assertTrue(com.example.domain.model.TransferStateMachine.isTerminal(com.example.domain.model.SessionState.CANCELLED))
-        assertTrue(com.example.domain.model.TransferStateMachine.isTerminal(com.example.domain.model.SessionState.FAILED))
-        assertFalse(com.example.domain.model.TransferStateMachine.isTerminal(com.example.domain.model.SessionState.TRANSFERRING))
-        assertFalse(com.example.domain.model.TransferStateMachine.isTerminal(com.example.domain.model.SessionState.IDLE))
+        assertTrue(
+            com.example.domain.model.TransferStateMachine
+                .isTerminal(com.example.domain.model.SessionState.COMPLETED),
+        )
+        assertTrue(
+            com.example.domain.model.TransferStateMachine
+                .isTerminal(com.example.domain.model.SessionState.CANCELLED),
+        )
+        assertTrue(
+            com.example.domain.model.TransferStateMachine
+                .isTerminal(com.example.domain.model.SessionState.FAILED),
+        )
+        assertFalse(
+            com.example.domain.model.TransferStateMachine
+                .isTerminal(com.example.domain.model.SessionState.TRANSFERRING),
+        )
+        assertFalse(
+            com.example.domain.model.TransferStateMachine
+                .isTerminal(com.example.domain.model.SessionState.IDLE),
+        )
     }
 
     @Test
@@ -339,18 +383,26 @@ class ExampleUnitTest {
 
     @Test
     fun testErrorTaxonomy() {
-        val storageErr = com.example.domain.model.DropSendError.StorageFull(5000L, 1000L)
+        val storageErr =
+            com.example.domain.model.DropSendError
+                .StorageFull(5000L, 1000L)
         assertEquals("ERR_STORAGE_FULL", storageErr.code)
         assertTrue(storageErr.userMessage.contains("Not enough free storage"))
 
-        val checksumErr = com.example.domain.model.DropSendError.ChecksumMismatch("test.pdf")
+        val checksumErr =
+            com.example.domain.model.DropSendError
+                .ChecksumMismatch("test.pdf")
         assertEquals("ERR_CHECKSUM_MISMATCH", checksumErr.code)
         assertTrue(checksumErr.userMessage.contains("test.pdf"))
 
-        val permErr = com.example.domain.model.DropSendError.PermissionDenied("NEARBY_WIFI_DEVICES")
+        val permErr =
+            com.example.domain.model.DropSendError
+                .PermissionDenied("NEARBY_WIFI_DEVICES")
         assertEquals("ERR_PERMISSION_DENIED", permErr.code)
 
-        val timeoutErr = com.example.domain.model.DropSendError.Timeout("Transfer session")
+        val timeoutErr =
+            com.example.domain.model.DropSendError
+                .Timeout("Transfer session")
         assertEquals("ERR_TIMEOUT", timeoutErr.code)
     }
 
@@ -358,12 +410,13 @@ class ExampleUnitTest {
     fun testLargeFileLongOffsets() {
         val largeSize = 4L * 1024 * 1024 * 1024 // 4 GB file (> 32-bit int)
         val chunkOffset = 3L * 1024 * 1024 * 1024 // 3 GB offset
-        val chunk = ProtocolMessage.Chunk(
-            fileId = "large-4gb-file",
-            sequence = 24576L,
-            offset = chunkOffset,
-            payload = byteArrayOf(1, 2, 3, 4)
-        )
+        val chunk =
+            ProtocolMessage.Chunk(
+                fileId = "large-4gb-file",
+                sequence = 24576L,
+                offset = chunkOffset,
+                payload = byteArrayOf(1, 2, 3, 4),
+            )
 
         val bos = ByteArrayOutputStream()
         chunk.writeToStream(bos)
@@ -379,14 +432,16 @@ class ExampleUnitTest {
     @Test
     fun testFilenameCollisionResolution() {
         val existingFiles = setOf("report.pdf", "report (1).pdf", "report (2).pdf")
-        val candidate = StorageManager.resolveUniqueFileName("report.pdf") { name ->
-            existingFiles.contains(name)
-        }
+        val candidate =
+            StorageManager.resolveUniqueFileName("report.pdf") { name ->
+                existingFiles.contains(name)
+            }
         assertEquals("report (3).pdf", candidate)
 
-        val nonColliding = StorageManager.resolveUniqueFileName("invoice.pdf") { name ->
-            existingFiles.contains(name)
-        }
+        val nonColliding =
+            StorageManager.resolveUniqueFileName("invoice.pdf") { name ->
+                existingFiles.contains(name)
+            }
         assertEquals("invoice.pdf", nonColliding)
     }
 

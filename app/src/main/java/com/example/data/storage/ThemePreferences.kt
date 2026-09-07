@@ -8,8 +8,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class ThemePreferences(context: Context) {
-
+class ThemePreferences(
+    context: Context,
+) {
     companion object {
         private const val PREFS_NAME = "dropsend_theme_prefs"
         private const val KEY_PALETTE = "selected_palette"

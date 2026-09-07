@@ -10,7 +10,10 @@ interface TransferTransport {
     /**
      * Connect as a sender/client to the target host and port or Bluetooth device
      */
-    suspend fun connect(targetAddress: String, port: Int = 8888)
+    suspend fun connect(
+        targetAddress: String,
+        port: Int = 8888,
+    )
 
     /**
      * Start listening as a receiver/server on the local network/socket

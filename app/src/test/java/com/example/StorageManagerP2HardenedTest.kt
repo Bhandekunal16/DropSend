@@ -24,7 +24,6 @@ import java.security.MessageDigest
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class StorageManagerP2HardenedTest {
-
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     // 1. Resume integrity & metadata checkpointing (P2-1)
@@ -60,30 +59,32 @@ class StorageManagerP2HardenedTest {
 
     // 2. Checksum error semantics (P2-2)
     @Test
-    fun testP2_2_ChecksumSemanticsNeverReturnEmptyStringOnFailure() = runBlocking {
-        val sm = StorageManager(context)
+    fun testP2_2_ChecksumSemanticsNeverReturnEmptyStringOnFailure() =
+        runBlocking {
+            val sm = StorageManager(context)
 
-        // Missing URI throws FileNotFoundException
-        val invalidFile = TransferFile(
-            id = "f-invalid",
-            uri = null,
-            name = "missing.txt",
-            mimeType = "text/plain",
-            sizeBytes = 100L
-        )
+            // Missing URI throws FileNotFoundException
+            val invalidFile =
+                TransferFile(
+                    id = "f-invalid",
+                    uri = null,
+                    name = "missing.txt",
+                    mimeType = "text/plain",
+                    sizeBytes = 100L,
+                )
 
-        try {
-            sm.calculateFileChecksum(invalidFile)
-            fail("Expected FileNotFoundException on missing URI")
-        } catch (e: FileNotFoundException) {
-            // Expected: Typed exception rather than silent ""
-            assertNotNull(e.message)
+            try {
+                sm.calculateFileChecksum(invalidFile)
+                fail("Expected FileNotFoundException on missing URI")
+            } catch (e: FileNotFoundException) {
+                // Expected: Typed exception rather than silent ""
+                assertNotNull(e.message)
+            }
+
+            // Structured result returns FileNotFound
+            val result = sm.calculateFileChecksumResult(invalidFile)
+            assertTrue(result is ChecksumResult.FileNotFound)
         }
-
-        // Structured result returns FileNotFound
-        val result = sm.calculateFileChecksumResult(invalidFile)
-        assertTrue(result is ChecksumResult.FileNotFound)
-    }
 
     // 3. Multi-partition storage preflight & bounds (P2-3 & P2-8)
     @Test
@@ -135,47 +136,51 @@ class StorageManagerP2HardenedTest {
 
     // 5. Finalize with single-pass copy & digest (P2-11)
     @Test
-    fun testP2_11_FinalizeWithAccurateChecksum() = runBlocking {
-        val sm = StorageManager(context)
-        val temp = sm.createTempFileForReceiving("f-test-finalize", "final_test.txt")
-        val content = "DropSend Production Checksum Verification Content".toByteArray(Charsets.UTF_8)
-        sm.writeChunkToTempFile(temp, 0L, content)
+    fun testP2_11_FinalizeWithAccurateChecksum() =
+        runBlocking {
+            val sm = StorageManager(context)
+            val temp = sm.createTempFileForReceiving("f-test-finalize", "final_test.txt")
+            val content = "DropSend Production Checksum Verification Content".toByteArray(Charsets.UTF_8)
+            sm.writeChunkToTempFile(temp, 0L, content)
 
-        val md = MessageDigest.getInstance("SHA-256")
-        val expectedSha = md.digest(content).joinToString("") { "%02x".format(it) }
+            val md = MessageDigest.getInstance("SHA-256")
+            val expectedSha = md.digest(content).joinToString("") { "%02x".format(it) }
 
-        val uri = sm.finalizeReceivedFile(
-            tempFile = temp,
-            targetFileName = "final_test.txt",
-            mimeType = "text/plain",
-            expectedChecksum = expectedSha
-        )
+            val uri =
+                sm.finalizeReceivedFile(
+                    tempFile = temp,
+                    targetFileName = "final_test.txt",
+                    mimeType = "text/plain",
+                    expectedChecksum = expectedSha,
+                )
 
-        assertNotNull(uri)
-        assertFalse(temp.exists()) // Temp file must be cleaned up
+            assertNotNull(uri)
+            assertFalse(temp.exists()) // Temp file must be cleaned up
 
-        sm.clearTempFiles()
-    }
+            sm.clearTempFiles()
+        }
 
     // 6. Checksum mismatch triggers total rollback (P2-2 & P2-6)
     @Test
-    fun testP2_2_ChecksumMismatchTriggersTotalRollback() = runBlocking {
-        val sm = StorageManager(context)
-        val temp = sm.createTempFileForReceiving("f-test-mismatch", "corrupted.txt")
-        sm.writeChunkToTempFile(temp, 0L, "Some content".toByteArray())
+    fun testP2_2_ChecksumMismatchTriggersTotalRollback() =
+        runBlocking {
+            val sm = StorageManager(context)
+            val temp = sm.createTempFileForReceiving("f-test-mismatch", "corrupted.txt")
+            sm.writeChunkToTempFile(temp, 0L, "Some content".toByteArray())
 
-        val bogusChecksum = "0000000000000000000000000000000000000000000000000000000000000000"
+            val bogusChecksum = "0000000000000000000000000000000000000000000000000000000000000000"
 
-        val uri = sm.finalizeReceivedFile(
-            tempFile = temp,
-            targetFileName = "corrupted.txt",
-            mimeType = "text/plain",
-            expectedChecksum = bogusChecksum
-        )
+            val uri =
+                sm.finalizeReceivedFile(
+                    tempFile = temp,
+                    targetFileName = "corrupted.txt",
+                    mimeType = "text/plain",
+                    expectedChecksum = bogusChecksum,
+                )
 
-        assertNull("Checksum mismatch must return null", uri)
-        assertFalse("Temp file must be deleted on checksum mismatch", temp.exists())
+            assertNull("Checksum mismatch must return null", uri)
+            assertFalse("Temp file must be deleted on checksum mismatch", temp.exists())
 
-        sm.clearTempFiles()
-    }
+            sm.clearTempFiles()
+        }
 }

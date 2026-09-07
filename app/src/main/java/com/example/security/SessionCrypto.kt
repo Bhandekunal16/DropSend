@@ -19,7 +19,6 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 object SessionCrypto {
-
     private val secureRandom = SecureRandom()
     private const val GCM_TAG_LENGTH = 128
     private const val GCM_IV_LENGTH = 12
@@ -56,7 +55,10 @@ object SessionCrypto {
     /**
      * Standard RFC 5869 HKDF-Extract using HmacSHA256
      */
-    fun hkdfExtract(salt: ByteArray, ikm: ByteArray): ByteArray {
+    fun hkdfExtract(
+        salt: ByteArray,
+        ikm: ByteArray,
+    ): ByteArray {
         val mac = Mac.getInstance("HmacSHA256")
         val saltKey = if (salt.isNotEmpty()) SecretKeySpec(salt, "HmacSHA256") else SecretKeySpec(ByteArray(32), "HmacSHA256")
         mac.init(saltKey)
@@ -66,7 +68,11 @@ object SessionCrypto {
     /**
      * Standard RFC 5869 HKDF-Expand using HmacSHA256
      */
-    fun hkdfExpand(prk: ByteArray, info: ByteArray, length: Int): ByteArray {
+    fun hkdfExpand(
+        prk: ByteArray,
+        info: ByteArray,
+        length: Int,
+    ): ByteArray {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(prk, "HmacSHA256"))
         val result = ByteArray(length)
@@ -94,7 +100,7 @@ object SessionCrypto {
         myPrivateKey: java.security.PrivateKey,
         peerPublicKeyBytes: ByteArray,
         salt: ByteArray = byteArrayOf(),
-        info: String = "DropSend-v2-AES-GCM-Key"
+        info: String = "DropSend-v2-AES-GCM-Key",
     ): ByteArray {
         val keyFactory = KeyFactory.getInstance("EC")
         val x509Spec = X509EncodedKeySpec(peerPublicKeyBytes)
@@ -131,7 +137,7 @@ object SessionCrypto {
     fun deriveVerificationCode(
         sessionId: String,
         sharedKeyBytes: ByteArray,
-        additionalContext: String = ""
+        additionalContext: String = "",
     ): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(sharedKeyBytes, "HmacSHA256"))
@@ -149,7 +155,11 @@ object SessionCrypto {
     /**
      * Encrypts a chunk payload with AES-GCM using session key and sequence number as nonce
      */
-    fun encryptChunk(payload: ByteArray, keyBytes: ByteArray, sequence: Long): ByteArray {
+    fun encryptChunk(
+        payload: ByteArray,
+        keyBytes: ByteArray,
+        sequence: Long,
+    ): ByteArray {
         val secretKey: SecretKey = SecretKeySpec(keyBytes, "AES")
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
 
@@ -175,7 +185,10 @@ object SessionCrypto {
     /**
      * Decrypts a chunk payload encrypted with AES-GCM
      */
-    fun decryptChunk(encryptedData: ByteArray, keyBytes: ByteArray): ByteArray {
+    fun decryptChunk(
+        encryptedData: ByteArray,
+        keyBytes: ByteArray,
+    ): ByteArray {
         if (encryptedData.size <= GCM_IV_LENGTH) {
             throw IllegalArgumentException("Invalid encrypted chunk length: ${encryptedData.size}")
         }
@@ -215,4 +228,3 @@ object SessionCrypto {
         }
     }
 }
-

@@ -15,7 +15,6 @@ import java.util.UUID
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class BleDiscoveryServiceTest {
-
     private lateinit var context: Context
     private lateinit var bleDiscoveryService: BleDiscoveryService
 

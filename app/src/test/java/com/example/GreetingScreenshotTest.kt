@@ -18,23 +18,22 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = RobolectricDeviceQualifiers.Pixel8, sdk = [36])
 class GreetingScreenshotTest {
+    @get:Rule val composeTestRule = createComposeRule()
 
-  @get:Rule val composeTestRule = createComposeRule()
+    @Test
+    fun dropsend_success_screenshot() {
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                SuccessScreen(
+                    role = SharingRole.SENDER,
+                    completedCount = 3,
+                    totalBytes = 45000000L,
+                    onSendMore = {},
+                    onDone = {},
+                )
+            }
+        }
 
-  @Test
-  fun dropsend_success_screenshot() {
-    composeTestRule.setContent {
-      MyApplicationTheme {
-        SuccessScreen(
-          role = SharingRole.SENDER,
-          completedCount = 3,
-          totalBytes = 45000000L,
-          onSendMore = {},
-          onDone = {}
-        )
-      }
+        composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/dropsend_success.png")
     }
-
-    composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/dropsend_success.png")
-  }
 }

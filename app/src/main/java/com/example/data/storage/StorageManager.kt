@@ -46,19 +46,42 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.coroutineContext
 
 sealed class StorageValidationResult {
-    data class Sufficient(val availableBytes: Long, val requiredBytes: Long) : StorageValidationResult()
-    data class Insufficient(val availableBytes: Long, val requiredBytes: Long, val message: String) : StorageValidationResult()
+    data class Sufficient(
+        val availableBytes: Long,
+        val requiredBytes: Long,
+    ) : StorageValidationResult()
+
+    data class Insufficient(
+        val availableBytes: Long,
+        val requiredBytes: Long,
+        val message: String,
+    ) : StorageValidationResult()
 }
 
 /**
  * Diagnostic result of a file checksum calculation.
  */
 sealed class ChecksumResult {
-    data class Success(val hexDigest: String) : ChecksumResult()
-    data class ChecksumMismatch(val expected: String, val actual: String) : ChecksumResult()
-    data class FileNotFound(val message: String) : ChecksumResult()
-    data class PermissionDenied(val cause: Throwable) : ChecksumResult()
-    data class IoError(val cause: Throwable) : ChecksumResult()
+    data class Success(
+        val hexDigest: String,
+    ) : ChecksumResult()
+
+    data class ChecksumMismatch(
+        val expected: String,
+        val actual: String,
+    ) : ChecksumResult()
+
+    data class FileNotFound(
+        val message: String,
+    ) : ChecksumResult()
+
+    data class PermissionDenied(
+        val cause: Throwable,
+    ) : ChecksumResult()
+
+    data class IoError(
+        val cause: Throwable,
+    ) : ChecksumResult()
 }
 
 /**
@@ -71,7 +94,7 @@ data class StorageTransferMetrics(
     val durationMs: Long,
     val throughputMBps: Double,
     val resumed: Boolean,
-    val mediaStoreUsed: Boolean
+    val mediaStoreUsed: Boolean,
 )
 
 /**
@@ -117,8 +140,9 @@ data class StorageTransferMetrics(
  * 6. Comprehensive Filename Hardening: Defense-in-depth against Windows reserved device names (CON, NUL, AUX, COM1..9),
  *    newlines, carriage returns, tabs, SQL wildcards, and directory traversal attacks while preserving Unicode.
  */
-class StorageManager(private val context: Context) {
-
+class StorageManager(
+    private val context: Context,
+) {
     companion object {
         private const val TAG = "StorageManager"
         const val DROPSEND_FOLDER_NAME = DropSendConfig.DROPSEND_FOLDER_NAME
@@ -136,11 +160,31 @@ class StorageManager(private val context: Context) {
         private val ILLEGAL_CHARS_REGEX = Regex("[\\\\/:*?\"<>|\\x00-\\x1F]")
         private val SAFE_FILE_ID_REGEX = Regex("[^a-zA-Z0-9_-]")
 
-        private val WINDOWS_RESERVED_NAMES = setOf(
-            "CON", "PRN", "AUX", "NUL",
-            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
-        )
+        private val WINDOWS_RESERVED_NAMES =
+            setOf(
+                "CON",
+                "PRN",
+                "AUX",
+                "NUL",
+                "COM1",
+                "COM2",
+                "COM3",
+                "COM4",
+                "COM5",
+                "COM6",
+                "COM7",
+                "COM8",
+                "COM9",
+                "LPT1",
+                "LPT2",
+                "LPT3",
+                "LPT4",
+                "LPT5",
+                "LPT6",
+                "LPT7",
+                "LPT8",
+                "LPT9",
+            )
 
         private val HEX_CHARS = "0123456789abcdef".toCharArray()
 
@@ -149,11 +193,12 @@ class StorageManager(private val context: Context) {
          * ASCII control codes, and illegal filesystem characters while preserving Unicode.
          */
         fun sanitizeFileName(rawName: String): String {
-            var clean = rawName
-                .replace("\\", "/")
-                .substringAfterLast("/")
-                .replace("\u0000", "")
-                .trim()
+            var clean =
+                rawName
+                    .replace("\\", "/")
+                    .substringAfterLast("/")
+                    .replace("\u0000", "")
+                    .trim()
 
             // Replace illegal characters and ASCII control codes with underscore
             clean = clean.replace(ILLEGAL_CHARS_REGEX, "_")
@@ -182,12 +227,13 @@ class StorageManager(private val context: Context) {
             if (clean.length > MAX_FILENAME_LENGTH) {
                 val ext = clean.substringAfterLast('.', "")
                 val base = clean.substringBeforeLast('.')
-                clean = if (ext.isNotEmpty()) {
-                    val maxBaseLen = (MAX_FILENAME_LENGTH - ext.length - 1).coerceAtLeast(1)
-                    "${base.take(maxBaseLen)}.$ext"
-                } else {
-                    base.take(MAX_FILENAME_LENGTH)
-                }
+                clean =
+                    if (ext.isNotEmpty()) {
+                        val maxBaseLen = (MAX_FILENAME_LENGTH - ext.length - 1).coerceAtLeast(1)
+                        "${base.take(maxBaseLen)}.$ext"
+                    } else {
+                        base.take(MAX_FILENAME_LENGTH)
+                    }
             }
 
             return clean
@@ -197,7 +243,10 @@ class StorageManager(private val context: Context) {
          * Resolves a non-conflicting unique filename using an existence check predicate.
          * Preserved for full compatibility with existing unit tests and callers.
          */
-        fun resolveUniqueFileName(baseName: String, fileExistsCheck: (String) -> Boolean): String {
+        fun resolveUniqueFileName(
+            baseName: String,
+            fileExistsCheck: (String) -> Boolean,
+        ): String {
             val sanitized = sanitizeFileName(baseName)
             val nameWithoutExt = sanitized.substringBeforeLast('.', sanitized)
             val extWithDot = if (sanitized.contains('.')) ".${sanitized.substringAfterLast('.')}" else ""
@@ -256,10 +305,12 @@ class StorageManager(private val context: Context) {
         val file: File,
         val raf: RandomAccessFile,
         val channel: FileChannel,
-        val lock: Any = Any()
+        val lock: Any = Any(),
     ) {
         @Volatile var isClosed: Boolean = false
+
         @Volatile var activeWriters: Int = 0
+
         @Volatile var lastAccessTimeMs: Long = System.currentTimeMillis()
     }
 
@@ -282,89 +333,99 @@ class StorageManager(private val context: Context) {
      * Resolves a Uri to a TransferFile model with accurate 64-bit size, MIME type, and sanitized name.
      * Uses single-pass metadata query and avoids ParcelFileDescriptor allocations when size is already known.
      */
-    suspend fun resolveFile(uri: Uri): TransferFile = withContext(Dispatchers.IO) {
-        var rawName: String? = null
-        var size: Long = -1L
-        var mimeType: String? = null
+    suspend fun resolveFile(uri: Uri): TransferFile =
+        withContext(Dispatchers.IO) {
+            var rawName: String? = null
+            var size: Long = -1L
+            var mimeType: String? = null
 
-        val scheme = uri.scheme
+            val scheme = uri.scheme
 
-        // 1. Fast-path for file:// URIs (avoid ContentResolver entirely)
-        if (scheme == ContentResolver.SCHEME_FILE || scheme == null) {
-            val path = uri.path
-            if (!path.isNullOrBlank()) {
-                val f = File(path)
-                val len = f.length()
-                if (len > 0L || f.exists()) {
-                    rawName = f.name
-                    size = len
-                }
-            }
-        }
-
-        // 2. Targeted single query for content:// URIs
-        if (scheme == ContentResolver.SCHEME_CONTENT) {
-            try {
-                mimeType = contentResolver.getType(uri)
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-            }
-
-            try {
-                val projection = arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
-                contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                        if (nameIndex != -1 && !cursor.isNull(nameIndex)) {
-                            rawName = cursor.getString(nameIndex)
-                        }
-                        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                        if (sizeIndex != -1 && !cursor.isNull(sizeIndex)) {
-                            size = cursor.getLong(sizeIndex)
-                        }
+            // 1. Fast-path for file:// URIs (avoid ContentResolver entirely)
+            if (scheme == ContentResolver.SCHEME_FILE || scheme == null) {
+                val path = uri.path
+                if (!path.isNullOrBlank()) {
+                    val f = File(path)
+                    val len = f.length()
+                    if (len > 0L || f.exists()) {
+                        rawName = f.name
+                        size = len
                     }
                 }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Log.w(TAG, "Failed querying OpenableColumns for $uri: ${e.message}")
             }
-        }
 
-        // 3. Authoritative fallback for size only if still unknown (size == -1L)
-        if (size < 0L) {
-            try {
-                contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-                    val statSize = pfd.statSize
-                    if (statSize >= 0L) {
-                        size = statSize
-                    }
+            // 2. Targeted single query for content:// URIs
+            if (scheme == ContentResolver.SCHEME_CONTENT) {
+                try {
+                    mimeType = contentResolver.getType(uri)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                 }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Log.d(TAG, "PFD statSize unavailable for $uri: ${e.message}")
+
+                try {
+                    val projection = arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
+                    contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            if (nameIndex != -1 && !cursor.isNull(nameIndex)) {
+                                rawName = cursor.getString(nameIndex)
+                            }
+                            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                            if (sizeIndex != -1 && !cursor.isNull(sizeIndex)) {
+                                size = cursor.getLong(sizeIndex)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.w(TAG, "Failed querying OpenableColumns for $uri: ${e.message}")
+                }
             }
+
+            // 3. Authoritative fallback for size only if still unknown (size == -1L)
+            if (size < 0L) {
+                try {
+                    contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                        val statSize = pfd.statSize
+                        if (statSize >= 0L) {
+                            size = statSize
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.d(TAG, "PFD statSize unavailable for $uri: ${e.message}")
+                }
+            }
+
+            val resolvedName = sanitizeFileName(rawName ?: uri.lastPathSegment ?: "file_${System.currentTimeMillis()}")
+            val resolvedMimeType = resolveMimeTypeFast(uri, resolvedName, mimeType)
+
+            TransferFile(
+                id = UUID.randomUUID().toString(),
+                uri = uri,
+                name = resolvedName,
+                mimeType = resolvedMimeType,
+                sizeBytes = maxOf(0L, size),
+            )
         }
-
-        val resolvedName = sanitizeFileName(rawName ?: uri.lastPathSegment ?: "file_${System.currentTimeMillis()}")
-        val resolvedMimeType = resolveMimeTypeFast(uri, resolvedName, mimeType)
-
-        TransferFile(
-            id = UUID.randomUUID().toString(),
-            uri = uri,
-            name = resolvedName,
-            mimeType = resolvedMimeType,
-            sizeBytes = maxOf(0L, size)
-        )
-    }
 
     /**
      * Resolves precise MIME type by checking provided mime, ContentResolver, and MimeTypeMap.
      */
-    private fun resolveMimeTypeFast(uri: Uri, fileName: String, preloadedMime: String?): String {
+    private fun resolveMimeTypeFast(
+        uri: Uri,
+        fileName: String,
+        preloadedMime: String?,
+    ): String {
         var mime = preloadedMime
         if (mime.isNullOrBlank()) {
             if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
-                mime = try { contentResolver.getType(uri) } catch (_: Exception) { null }
+                mime =
+                    try {
+                        contentResolver.getType(uri)
+                    } catch (_: Exception) {
+                        null
+                    }
             }
         }
 
@@ -380,7 +441,10 @@ class StorageManager(private val context: Context) {
         return mime?.ifBlank { "*/*" } ?: "*/*"
     }
 
-    private fun resolveMimeType(uri: Uri, fileName: String): String = resolveMimeTypeFast(uri, fileName, null)
+    private fun resolveMimeType(
+        uri: Uri,
+        fileName: String,
+    ): String = resolveMimeTypeFast(uri, fileName, null)
 
     /**
      * Sanitizes a filename to protect against path traversal and illegal characters.
@@ -397,33 +461,42 @@ class StorageManager(private val context: Context) {
             return StorageValidationResult.Insufficient(0L, bytesNeeded, "Invalid file size.")
         }
         return try {
-            val statBytes = try {
-                StatFs(tempDir.path).availableBytes
-            } catch (_: Exception) {
-                0L
-            }
+            val statBytes =
+                try {
+                    StatFs(tempDir.path).availableBytes
+                } catch (_: Exception) {
+                    0L
+                }
             val tempAvailable = if (statBytes > 0L) statBytes else tempDir.usableSpace.coerceAtLeast(0L)
 
-            val destAvailable = try {
-                if (Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED) {
-                    val extDir = Environment.getExternalStorageDirectory()
-                    val bytes = StatFs(extDir.path).availableBytes
-                    if (bytes > 0L) bytes else if (extDir.usableSpace > 0L) extDir.usableSpace else tempAvailable
-                } else {
+            val destAvailable =
+                try {
+                    if (Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED) {
+                        val extDir = Environment.getExternalStorageDirectory()
+                        val bytes = StatFs(extDir.path).availableBytes
+                        if (bytes > 0L) {
+                            bytes
+                        } else if (extDir.usableSpace > 0L) {
+                            extDir.usableSpace
+                        } else {
+                            tempAvailable
+                        }
+                    } else {
+                        tempAvailable
+                    }
+                } catch (_: Exception) {
                     tempAvailable
                 }
-            } catch (_: Exception) {
-                tempAvailable
-            }
 
             // Both temp cache partition and destination volume must have sufficient space
             val effectiveAvailable = minOf(tempAvailable, destAvailable).coerceAtLeast(0L)
 
-            val totalRequired = if (bytesNeeded > Long.MAX_VALUE - STORAGE_SAFETY_MARGIN_BYTES) {
-                Long.MAX_VALUE
-            } else {
-                bytesNeeded + STORAGE_SAFETY_MARGIN_BYTES
-            }
+            val totalRequired =
+                if (bytesNeeded > Long.MAX_VALUE - STORAGE_SAFETY_MARGIN_BYTES) {
+                    Long.MAX_VALUE
+                } else {
+                    bytesNeeded + STORAGE_SAFETY_MARGIN_BYTES
+                }
 
             if (effectiveAvailable >= totalRequired) {
                 StorageValidationResult.Sufficient(effectiveAvailable, bytesNeeded)
@@ -433,7 +506,7 @@ class StorageManager(private val context: Context) {
                 StorageValidationResult.Insufficient(
                     availableBytes = effectiveAvailable,
                     requiredBytes = bytesNeeded,
-                    message = "Insufficient storage space: $requiredFormatted required, but only $availableFormatted free."
+                    message = "Insufficient storage space: $requiredFormatted required, but only $availableFormatted free.",
                 )
             }
         } catch (e: Exception) {
@@ -454,53 +527,55 @@ class StorageManager(private val context: Context) {
      * - Never returns an empty string ("") to ambiguously represent errors.
      */
     @Throws(FileNotFoundException::class, SecurityException::class, IOException::class, CancellationException::class)
-    suspend fun calculateFileChecksum(file: TransferFile): String = withContext(Dispatchers.IO) {
-        val uri = file.uri ?: throw FileNotFoundException("URI is null for file: ${file.name}")
-        val buffer = IoBufferPool.acquire()
-        try {
-            val inputStream = contentResolver.openInputStream(uri)
-                ?: throw FileNotFoundException("Unable to open input stream for URI: $uri (${file.name})")
+    suspend fun calculateFileChecksum(file: TransferFile): String =
+        withContext(Dispatchers.IO) {
+            val uri = file.uri ?: throw FileNotFoundException("URI is null for file: ${file.name}")
+            val buffer = IoBufferPool.acquire()
+            try {
+                val inputStream =
+                    contentResolver.openInputStream(uri)
+                        ?: throw FileNotFoundException("Unable to open input stream for URI: $uri (${file.name})")
 
-            inputStream.use { rawStream ->
-                val digest = MessageDigest.getInstance("SHA-256")
-                var read: Int
-                while (rawStream.read(buffer).also { read = it } != -1) {
-                    coroutineContext.ensureActive()
-                    digest.update(buffer, 0, read)
+                inputStream.use { rawStream ->
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    var read: Int
+                    while (rawStream.read(buffer).also { read = it } != -1) {
+                        coroutineContext.ensureActive()
+                        digest.update(buffer, 0, read)
+                    }
+                    bytesToHex(digest.digest())
                 }
-                bytesToHex(digest.digest())
+            } finally {
+                IoBufferPool.release(buffer)
             }
-        } finally {
-            IoBufferPool.release(buffer)
         }
-    }
 
     /**
      * Non-throwing checksum evaluation returning structured ChecksumResult.
      */
-    suspend fun calculateFileChecksumResult(file: TransferFile): ChecksumResult = try {
-        ChecksumResult.Success(calculateFileChecksum(file))
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: FileNotFoundException) {
-        ChecksumResult.FileNotFound(e.message ?: "File not found")
-    } catch (e: SecurityException) {
-        ChecksumResult.PermissionDenied(e)
-    } catch (e: IOException) {
-        ChecksumResult.IoError(e)
-    }
+    suspend fun calculateFileChecksumResult(file: TransferFile): ChecksumResult =
+        try {
+            ChecksumResult.Success(calculateFileChecksum(file))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: FileNotFoundException) {
+            ChecksumResult.FileNotFound(e.message ?: "File not found")
+        } catch (e: SecurityException) {
+            ChecksumResult.PermissionDenied(e)
+        } catch (e: IOException) {
+            ChecksumResult.IoError(e)
+        }
 
     /**
      * Opens an input stream for reading a file to send (chunked).
      */
-    fun openFileForReading(uri: Uri): InputStream? {
-        return try {
+    fun openFileForReading(uri: Uri): InputStream? =
+        try {
             contentResolver.openInputStream(uri)
         } catch (e: Exception) {
             Log.e(TAG, "Error opening input stream for uri: $uri", e)
             null
         }
-    }
 
     /**
      * Prepares a temporary file in app cache to write received chunks.
@@ -515,7 +590,7 @@ class StorageManager(private val context: Context) {
         fileId: String,
         fileName: String,
         expectedSize: Long = -1L,
-        resume: Boolean = false
+        resume: Boolean = false,
     ): File {
         val safeId = sanitizeFileId(fileId)
         val safeName = sanitizeFileName(fileName)
@@ -535,7 +610,10 @@ class StorageManager(private val context: Context) {
             val isOversized = expectedSize > 0L && partLen > expectedSize
 
             if (!partFile.exists() || !metaValid || isOversized) {
-                Log.w(TAG, "Invalid resume checkpoint for ${partFile.name}: length=$partLen, expected=$expectedSize, metaValid=$metaValid. Resetting.")
+                Log.w(
+                    TAG,
+                    "Invalid resume checkpoint for ${partFile.name}: length=$partLen, expected=$expectedSize, metaValid=$metaValid. Resetting.",
+                )
                 partFile.delete()
                 metaFile.delete()
             }
@@ -558,7 +636,7 @@ class StorageManager(private val context: Context) {
     fun createTempFileForReceiving(
         fileId: String,
         fileName: String,
-        resume: Boolean
+        resume: Boolean,
     ): File = createTempFileForReceiving(fileId, fileName, -1L, resume)
 
     /**
@@ -568,7 +646,7 @@ class StorageManager(private val context: Context) {
     fun getExistingPartOffset(
         fileId: String,
         fileName: String,
-        expectedSize: Long = -1L
+        expectedSize: Long = -1L,
     ): Long {
         val safeId = sanitizeFileId(fileId)
         val safeName = sanitizeFileName(fileName)
@@ -612,7 +690,10 @@ class StorageManager(private val context: Context) {
      * Safely truncates a temporary file to a confirmed checkpoint length if sender restarts
      * from an earlier offset.
      */
-    fun truncateTempFile(tempFile: File, length: Long) {
+    fun truncateTempFile(
+        tempFile: File,
+        length: Long,
+    ) {
         require(length >= 0L) { "Negative truncate length: $length" }
         closeHandleForFile(tempFile)
         try {
@@ -634,7 +715,11 @@ class StorageManager(private val context: Context) {
      * - Retries zero-byte writes up to MAX_ZERO_WRITE_RETRIES before throwing an IOException.
      * - Re-throws I/O exceptions so incomplete chunks are never silently treated as successful.
      */
-    fun writeChunkToTempFile(tempFile: File, offset: Long, payload: ByteArray) {
+    fun writeChunkToTempFile(
+        tempFile: File,
+        offset: Long,
+        payload: ByteArray,
+    ) {
         if (payload.isEmpty()) return
         require(offset >= 0L) { "Negative chunk offset: $offset" }
         if (offset > Long.MAX_VALUE - payload.size) {
@@ -663,7 +748,7 @@ class StorageManager(private val context: Context) {
                         zeroWriteCount++
                         if (zeroWriteCount >= MAX_ZERO_WRITE_RETRIES) {
                             throw IOException(
-                                "FileChannel.write returned 0 bytes $MAX_ZERO_WRITE_RETRIES consecutive times at position $currentPos (${buffer.remaining()} of ${payload.size} bytes unwritten)"
+                                "FileChannel.write returned 0 bytes $MAX_ZERO_WRITE_RETRIES consecutive times at position $currentPos (${buffer.remaining()} of ${payload.size} bytes unwritten)",
                             )
                         }
                         Thread.yield()
@@ -678,34 +763,38 @@ class StorageManager(private val context: Context) {
     /**
      * Atomically acquires a WriteHandle, incrementing activeWriters so it cannot be closed or evicted.
      */
-    private fun acquireWriteHandle(file: File, pathKey: String): WriteHandle {
+    private fun acquireWriteHandle(
+        file: File,
+        pathKey: String,
+    ): WriteHandle {
         while (true) {
             // Check handle pool capacity using LRU eviction BEFORE acquiring bucket lock to prevent nested compute calls
             if (activeWriteHandles.size >= MAX_ACTIVE_HANDLES) {
                 evictLruIdleHandle()
             }
 
-            val handle = activeWriteHandles.compute(pathKey) { _, existing ->
-                if (existing != null) {
-                    synchronized(existing.lock) {
-                        if (!existing.isClosed) {
-                            existing.activeWriters++
-                            existing.lastAccessTimeMs = System.currentTimeMillis()
-                            return@compute existing
+            val handle =
+                activeWriteHandles.compute(pathKey) { _, existing ->
+                    if (existing != null) {
+                        synchronized(existing.lock) {
+                            if (!existing.isClosed) {
+                                existing.activeWriters++
+                                existing.lastAccessTimeMs = System.currentTimeMillis()
+                                return@compute existing
+                            }
                         }
                     }
-                }
 
-                try {
-                    val raf = RandomAccessFile(file, "rw")
-                    val h = WriteHandle(file, raf, raf.channel)
-                    h.activeWriters = 1
-                    h.lastAccessTimeMs = System.currentTimeMillis()
-                    h
-                } catch (e: Exception) {
-                    throw IOException("Failed opening write channel for ${file.name}", e)
-                }
-            } ?: throw IOException("Failed to obtain write handle for ${file.name}")
+                    try {
+                        val raf = RandomAccessFile(file, "rw")
+                        val h = WriteHandle(file, raf, raf.channel)
+                        h.activeWriters = 1
+                        h.lastAccessTimeMs = System.currentTimeMillis()
+                        h
+                    } catch (e: Exception) {
+                        throw IOException("Failed opening write channel for ${file.name}", e)
+                    }
+                } ?: throw IOException("Failed to obtain write handle for ${file.name}")
 
             synchronized(handle.lock) {
                 if (!handle.isClosed) {
@@ -752,8 +841,14 @@ class StorageManager(private val context: Context) {
                     synchronized(current.lock) {
                         if (current.activeWriters == 0) {
                             current.isClosed = true
-                            try { current.channel.close() } catch (_: Exception) {}
-                            try { current.raf.close() } catch (_: Exception) {}
+                            try {
+                                current.channel.close()
+                            } catch (_: Exception) {
+                            }
+                            try {
+                                current.raf.close()
+                            } catch (_: Exception) {
+                            }
                             null // Evict from map
                         } else {
                             current
@@ -776,8 +871,14 @@ class StorageManager(private val context: Context) {
             if (handle != null) {
                 synchronized(handle.lock) {
                     handle.isClosed = true
-                    try { handle.channel.close() } catch (_: Exception) {}
-                    try { handle.raf.close() } catch (_: Exception) {}
+                    try {
+                        handle.channel.close()
+                    } catch (_: Exception) {
+                    }
+                    try {
+                        handle.raf.close()
+                    } catch (_: Exception) {
+                    }
                 }
             }
             null
@@ -800,10 +901,15 @@ class StorageManager(private val context: Context) {
         tempFile: File,
         targetFileName: String,
         mimeType: String,
-        expectedChecksum: String
+        expectedChecksum: String,
     ): Uri? {
         val tempAbsPath = tempFile.absolutePath
-        val tempCanonicalPath = try { tempFile.canonicalPath } catch (_: Exception) { tempAbsPath }
+        val tempCanonicalPath =
+            try {
+                tempFile.canonicalPath
+            } catch (_: Exception) {
+                tempAbsPath
+            }
         activeFinalizations.add(tempAbsPath)
         activeFinalizations.add(tempCanonicalPath)
 
@@ -826,17 +932,25 @@ class StorageManager(private val context: Context) {
                 val uniqueName = resolveUniqueFileName(sanitizedTarget)
 
                 try {
-                    val resultUri = saveWithChecksumVerification(
-                        tempFile = tempFile,
-                        fileName = uniqueName,
-                        mimeType = mimeType,
-                        expectedChecksum = expectedChecksum
-                    )
+                    val resultUri =
+                        saveWithChecksumVerification(
+                            tempFile = tempFile,
+                            fileName = uniqueName,
+                            mimeType = mimeType,
+                            expectedChecksum = expectedChecksum,
+                        )
 
                     if (resultUri != null) {
                         val duration = (System.currentTimeMillis() - startTime).coerceAtLeast(1L)
                         val throughputMBps = (fileLength.toDouble() / (1024 * 1024)) / (duration.toDouble() / 1000.0)
-                        Log.i(TAG, "Finalized $uniqueName ($fileLength bytes) in ${duration}ms (${String.format(Locale.US, "%.2f", throughputMBps)} MB/s)")
+                        Log.i(
+                            TAG,
+                            "Finalized $uniqueName ($fileLength bytes) in ${duration}ms (${String.format(
+                                Locale.US,
+                                "%.2f",
+                                throughputMBps,
+                            )} MB/s)",
+                        )
                     }
 
                     tempFile.delete()
@@ -865,22 +979,23 @@ class StorageManager(private val context: Context) {
         tempFile: File,
         fileName: String,
         mimeType: String,
-        expectedChecksum: String
+        expectedChecksum: String,
     ): Uri? {
         val resolvedMime = mimeType.ifBlank { resolveMimeTypeFast(Uri.EMPTY, fileName, null) }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             var insertedUri: Uri? = null
             try {
-                val values = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                    put(MediaStore.Downloads.MIME_TYPE, resolvedMime)
-                    put(
-                        MediaStore.Downloads.RELATIVE_PATH,
-                        "${Environment.DIRECTORY_DOWNLOADS}/$DROPSEND_FOLDER_NAME/"
-                    )
-                    put(MediaStore.Downloads.IS_PENDING, 1)
-                }
+                val values =
+                    ContentValues().apply {
+                        put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                        put(MediaStore.Downloads.MIME_TYPE, resolvedMime)
+                        put(
+                            MediaStore.Downloads.RELATIVE_PATH,
+                            "${Environment.DIRECTORY_DOWNLOADS}/$DROPSEND_FOLDER_NAME/",
+                        )
+                        put(MediaStore.Downloads.IS_PENDING, 1)
+                    }
 
                 insertedUri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                 if (insertedUri != null) {
@@ -909,13 +1024,19 @@ class StorageManager(private val context: Context) {
             } catch (e: Exception) {
                 if (e is CancellationException) {
                     insertedUri?.let { uri ->
-                        try { contentResolver.delete(uri, null, null) } catch (_: Exception) {}
+                        try {
+                            contentResolver.delete(uri, null, null)
+                        } catch (_: Exception) {
+                        }
                     }
                     throw e
                 }
                 Log.w(TAG, "MediaStore save failed, cleaning up and attempting fallback: ${e.message}")
                 insertedUri?.let { uri ->
-                    try { contentResolver.delete(uri, null, null) } catch (_: Exception) {}
+                    try {
+                        contentResolver.delete(uri, null, null)
+                    } catch (_: Exception) {
+                    }
                 }
             }
         }
@@ -928,7 +1049,10 @@ class StorageManager(private val context: Context) {
      * Streams tempFile into target content Uri while calculating SHA-256 digest in a single pass.
      * Employs cooperative coroutine cancellation and pooled 128 KB buffer for optimal throughput.
      */
-    private suspend fun copyAndDigest(tempFile: File, targetUri: Uri): String {
+    private suspend fun copyAndDigest(
+        tempFile: File,
+        targetUri: Uri,
+    ): String {
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = IoBufferPool.acquire()
         try {
@@ -952,7 +1076,10 @@ class StorageManager(private val context: Context) {
     /**
      * Public alias for streaming copy and checksum verification (P2-2).
      */
-    suspend fun copyAndChecksum(tempFile: File, targetUri: Uri): String = copyAndDigest(tempFile, targetUri)
+    suspend fun copyAndChecksum(
+        tempFile: File,
+        targetUri: Uri,
+    ): String = copyAndDigest(tempFile, targetUri)
 
     /**
      * Saves to legacy public Downloads or internal files directory with single-pass checksum verification.
@@ -962,16 +1089,17 @@ class StorageManager(private val context: Context) {
         tempFile: File,
         fileName: String,
         mimeType: String,
-        expectedChecksum: String
+        expectedChecksum: String,
     ): Uri? {
-        val targetDir = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
-            Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED
-        ) {
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            File(downloadsDir, DROPSEND_FOLDER_NAME).apply { mkdirs() }
-        } else {
-            File(appContext.filesDir, DROPSEND_FOLDER_NAME).apply { mkdirs() }
-        }
+        val targetDir =
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+                Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED
+            ) {
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                File(downloadsDir, DROPSEND_FOLDER_NAME).apply { mkdirs() }
+            } else {
+                File(appContext.filesDir, DROPSEND_FOLDER_NAME).apply { mkdirs() }
+            }
 
         val destFile = File(targetDir, fileName)
 
@@ -1080,7 +1208,7 @@ class StorageManager(private val context: Context) {
     private fun queryExistingCollisionIndices(
         nameWithoutExt: String,
         extWithDot: String,
-        sanitized: String
+        sanitized: String,
     ): HashSet<Int> {
         val usedIndices = HashSet<Int>()
 
@@ -1096,7 +1224,8 @@ class StorageManager(private val context: Context) {
             dropSendDir.list()?.forEach { name ->
                 parseCollisionIndex(name, nameWithoutExt, extWithDot)?.let(usedIndices::add)
             }
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
 
         // 3. Batch query MediaStore for matching prefix in a single query
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -1104,26 +1233,28 @@ class StorageManager(private val context: Context) {
                 val projection = arrayOf(MediaStore.Downloads.DISPLAY_NAME)
                 val escapedPrefix = nameWithoutExt.replace("%", "\\%").replace("_", "\\_")
                 val selection = "(${MediaStore.Downloads.DISPLAY_NAME} = ? OR ${MediaStore.Downloads.DISPLAY_NAME} LIKE ? ESCAPE '\\') AND ${MediaStore.Downloads.RELATIVE_PATH} LIKE ?"
-                val selectionArgs = arrayOf(
-                    sanitized,
-                    "$escapedPrefix (%$extWithDot",
-                    "${Environment.DIRECTORY_DOWNLOADS}/$DROPSEND_FOLDER_NAME/%"
-                )
-                contentResolver.query(
-                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                    projection,
-                    selection,
-                    selectionArgs,
-                    null
-                )?.use { cursor ->
-                    val nameCol = cursor.getColumnIndex(MediaStore.Downloads.DISPLAY_NAME)
-                    if (nameCol != -1 && cursor.moveToFirst()) {
-                        do {
-                            parseCollisionIndex(cursor.getString(nameCol), nameWithoutExt, extWithDot)
-                                ?.let(usedIndices::add)
-                        } while (cursor.moveToNext())
+                val selectionArgs =
+                    arrayOf(
+                        sanitized,
+                        "$escapedPrefix (%$extWithDot",
+                        "${Environment.DIRECTORY_DOWNLOADS}/$DROPSEND_FOLDER_NAME/%",
+                    )
+                contentResolver
+                    .query(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        projection,
+                        selection,
+                        selectionArgs,
+                        null,
+                    )?.use { cursor ->
+                        val nameCol = cursor.getColumnIndex(MediaStore.Downloads.DISPLAY_NAME)
+                        if (nameCol != -1 && cursor.moveToFirst()) {
+                            do {
+                                parseCollisionIndex(cursor.getString(nameCol), nameWithoutExt, extWithDot)
+                                    ?.let(usedIndices::add)
+                            } while (cursor.moveToNext())
+                        }
                     }
-                }
             } catch (e: Exception) {
                 Log.d(TAG, "MediaStore batch query fallback: ${e.message}")
             }
@@ -1138,7 +1269,11 @@ class StorageManager(private val context: Context) {
      * - "file (1).txt" -> 1
      * - "file (24).txt" -> 24
      */
-    private fun parseCollisionIndex(name: String, prefix: String, suffix: String): Int? {
+    private fun parseCollisionIndex(
+        name: String,
+        prefix: String,
+        suffix: String,
+    ): Int? {
         if (name == "$prefix$suffix") return 0
         val expectedPrefix = "$prefix ("
         if (!name.startsWith(expectedPrefix) || !name.endsWith(suffix)) return null
@@ -1155,7 +1290,8 @@ class StorageManager(private val context: Context) {
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             val dropSendDir = File(downloadsDir, DROPSEND_FOLDER_NAME)
             if (File(dropSendDir, fileName).exists()) return true
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
 
         return isFileInMediaStore(fileName)
     }
@@ -1166,15 +1302,16 @@ class StorageManager(private val context: Context) {
             val projection = arrayOf(MediaStore.Downloads._ID)
             val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ? AND ${MediaStore.Downloads.RELATIVE_PATH} LIKE ?"
             val selectionArgs = arrayOf(fileName, "${Environment.DIRECTORY_DOWNLOADS}/$DROPSEND_FOLDER_NAME/%")
-            contentResolver.query(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                projection,
-                selection,
-                selectionArgs,
-                null
-            )?.use { cursor ->
-                cursor.moveToFirst()
-            } ?: false
+            contentResolver
+                .query(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    projection,
+                    selection,
+                    selectionArgs,
+                    null,
+                )?.use { cursor ->
+                    cursor.moveToFirst()
+                } ?: false
         } catch (_: Exception) {
             false
         }
@@ -1183,59 +1320,68 @@ class StorageManager(private val context: Context) {
     /**
      * Generates a real sample file on disk for simulation/demo so user can immediately open and test it.
      */
-    suspend fun createAndSaveDemoFile(fileName: String, mimeType: String): Uri? = withContext(Dispatchers.IO) {
-        val safeName = sanitizeFileName(fileName)
-        try {
-            val appDir = File(appContext.filesDir, DROPSEND_FOLDER_NAME).apply {
-                mkdirs()
-            }
-            val destFile = File(appDir, safeName)
+    suspend fun createAndSaveDemoFile(
+        fileName: String,
+        mimeType: String,
+    ): Uri? =
+        withContext(Dispatchers.IO) {
+            val safeName = sanitizeFileName(fileName)
+            try {
+                val appDir =
+                    File(appContext.filesDir, DROPSEND_FOLDER_NAME).apply {
+                        mkdirs()
+                    }
+                val destFile = File(appDir, safeName)
 
-            FileOutputStream(destFile).use { out ->
-                when {
-                    mimeType.startsWith("image/") -> {
-                        val bitmap = Bitmap.createBitmap(800, 600, Bitmap.Config.ARGB_8888)
-                        try {
-                            val canvas = Canvas(bitmap)
-                            canvas.drawColor(Color.rgb(30, 41, 59))
-                            val paint = Paint().apply {
-                                color = Color.rgb(56, 189, 248)
-                                textSize = 36f
-                                isAntiAlias = true
-                                textAlign = Paint.Align.CENTER
+                FileOutputStream(destFile).use { out ->
+                    when {
+                        mimeType.startsWith("image/") -> {
+                            val bitmap = Bitmap.createBitmap(800, 600, Bitmap.Config.ARGB_8888)
+                            try {
+                                val canvas = Canvas(bitmap)
+                                canvas.drawColor(Color.rgb(30, 41, 59))
+                                val paint =
+                                    Paint().apply {
+                                        color = Color.rgb(56, 189, 248)
+                                        textSize = 36f
+                                        isAntiAlias = true
+                                        textAlign = Paint.Align.CENTER
+                                    }
+                                canvas.drawText("DropSend Transferred Image", 400f, 280f, paint)
+                                paint.color = Color.WHITE
+                                paint.textSize = 24f
+                                canvas.drawText(safeName, 400f, 340f, paint)
+                                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                            } finally {
+                                bitmap.recycle()
                             }
-                            canvas.drawText("DropSend Transferred Image", 400f, 280f, paint)
-                            paint.color = Color.WHITE
-                            paint.textSize = 24f
-                            canvas.drawText(safeName, 400f, 340f, paint)
-                            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
-                        } finally {
-                            bitmap.recycle()
+                        }
+
+                        mimeType == "application/pdf" -> {
+                            val pdfContent = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 595 842]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000010 00000 n\n0000000053 00000 n\n0000000102 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF"
+                            out.write(pdfContent.toByteArray())
+                        }
+
+                        mimeType.startsWith("text/") -> {
+                            val text = "DropSend Fast Local Transfer Document\n\nFile Name: $safeName\nTransferred securely via direct encrypted link.\nTimestamp: ${System.currentTimeMillis()}\n"
+                            out.write(text.toByteArray())
+                        }
+
+                        else -> {
+                            val text = "DropSend File Transfer: $safeName\nTransferred successfully!\n"
+                            out.write(text.toByteArray())
+                            out.write(ByteArray(1024) { (it % 128).toByte() })
                         }
                     }
-                    mimeType == "application/pdf" -> {
-                        val pdfContent = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 595 842]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000010 00000 n\n0000000053 00000 n\n0000000102 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF"
-                        out.write(pdfContent.toByteArray())
-                    }
-                    mimeType.startsWith("text/") -> {
-                        val text = "DropSend Fast Local Transfer Document\n\nFile Name: $safeName\nTransferred securely via direct encrypted link.\nTimestamp: ${System.currentTimeMillis()}\n"
-                        out.write(text.toByteArray())
-                    }
-                    else -> {
-                        val text = "DropSend File Transfer: $safeName\nTransferred successfully!\n"
-                        out.write(text.toByteArray())
-                        out.write(ByteArray(1024) { (it % 128).toByte() })
-                    }
+                    out.flush()
                 }
-                out.flush()
-            }
 
-            getFileProviderUri(destFile)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error generating demo file", e)
-            null
+                getFileProviderUri(destFile)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error generating demo file", e)
+                null
+            }
         }
-    }
 
     /**
      * Obtains a secure FileProvider content Uri.
@@ -1287,39 +1433,44 @@ class StorageManager(private val context: Context) {
         val resolvedMime = resolveMimeTypeFast(uri, file.name, file.mimeType)
 
         try {
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, resolvedMime)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
+            val intent =
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, resolvedMime)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             appContext.startActivity(intent)
         } catch (e: ActivityNotFoundException) {
             Log.w(TAG, "No specific activity for $resolvedMime, trying generic */*", e)
             try {
-                val genericIntent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(uri, "*/*")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                val chooser = Intent.createChooser(genericIntent, "Open with...").apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
+                val genericIntent =
+                    Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "*/*")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                val chooser =
+                    Intent.createChooser(genericIntent, "Open with...").apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
                 appContext.startActivity(chooser)
             } catch (ex: Exception) {
                 Log.e(TAG, "Failed opening file chooser", ex)
-                Toast.makeText(
-                    appContext,
-                    "Saved to Downloads/DropSend: ${file.name}",
-                    Toast.LENGTH_LONG
-                ).show()
+                Toast
+                    .makeText(
+                        appContext,
+                        "Saved to Downloads/DropSend: ${file.name}",
+                        Toast.LENGTH_LONG,
+                    ).show()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error launching file view intent", e)
-            Toast.makeText(
-                appContext,
-                "File saved: ${file.name}",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast
+                .makeText(
+                    appContext,
+                    "File saved: ${file.name}",
+                    Toast.LENGTH_SHORT,
+                ).show()
         }
     }
 
@@ -1328,18 +1479,20 @@ class StorageManager(private val context: Context) {
      */
     fun openDownloadsFolder() {
         try {
-            val intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
+            val intent =
+                Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             appContext.startActivity(intent)
         } catch (e: Exception) {
             Log.w(TAG, "Standard Downloads view action failed, trying MediaStore uri fallback", e)
             try {
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(MediaStore.Downloads.EXTERNAL_CONTENT_URI, "resource/folder")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
+                val intent =
+                    Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(MediaStore.Downloads.EXTERNAL_CONTENT_URI, "resource/folder")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
                 appContext.startActivity(intent)
             } catch (_: Exception) {
                 Toast.makeText(appContext, "Saved in Downloads/DropSend", Toast.LENGTH_SHORT).show()
@@ -1369,7 +1522,12 @@ class StorageManager(private val context: Context) {
                     if (handle != null) {
                         synchronized(handle.lock) {
                             val handleAbs = handle.file.absolutePath
-                            val handleCanonical = try { handle.file.canonicalPath } catch (_: Exception) { handleAbs }
+                            val handleCanonical =
+                                try {
+                                    handle.file.canonicalPath
+                                } catch (_: Exception) {
+                                    handleAbs
+                                }
                             if (handle.activeWriters > 0 ||
                                 activeFinalizations.contains(handleAbs) ||
                                 activeFinalizations.contains(handleCanonical)
@@ -1379,8 +1537,14 @@ class StorageManager(private val context: Context) {
                                 handle // Keep in map
                             } else {
                                 handle.isClosed = true
-                                try { handle.channel.close() } catch (_: Exception) {}
-                                try { handle.raf.close() } catch (_: Exception) {}
+                                try {
+                                    handle.channel.close()
+                                } catch (_: Exception) {
+                                }
+                                try {
+                                    handle.raf.close()
+                                } catch (_: Exception) {
+                                }
                                 null // Atomically evict from map
                             }
                         }
@@ -1394,17 +1558,29 @@ class StorageManager(private val context: Context) {
             if (tempDir.exists()) {
                 tempDir.listFiles()?.forEach { file ->
                     val absPath = file.absolutePath
-                    val canonicalPath = try { file.canonicalPath } catch (_: Exception) { absPath }
+                    val canonicalPath =
+                        try {
+                            file.canonicalPath
+                        } catch (_: Exception) {
+                            absPath
+                        }
                     val isFinalizing = activeFinalizations.contains(absPath) || activeFinalizations.contains(canonicalPath)
                     val isActivelyLeased = activeFilePaths.contains(absPath) || activeFilePaths.contains(canonicalPath)
                     if (!isActivelyLeased && !isFinalizing) {
-                        val isCurrentlyWriting = activeWriteHandles[absPath]?.let { h ->
-                            synchronized(h.lock) { h.activeWriters > 0 }
-                        } ?: false
+                        val isCurrentlyWriting =
+                            activeWriteHandles[absPath]?.let { h ->
+                                synchronized(h.lock) { h.activeWriters > 0 }
+                            } ?: false
 
                         if (!isCurrentlyWriting) {
-                            try { file.delete() } catch (_: Exception) {}
-                            try { getMetaFile(file).delete() } catch (_: Exception) {}
+                            try {
+                                file.delete()
+                            } catch (_: Exception) {
+                            }
+                            try {
+                                getMetaFile(file).delete()
+                            } catch (_: Exception) {
+                            }
                         }
                     }
                 }
@@ -1439,10 +1615,14 @@ class StorageManager(private val context: Context) {
     // Checkpoint & Sidecar Metadata Helpers (P2-1)
     // ==========================================
 
-    private fun getMetaFile(partFile: File): File =
-        File(partFile.parentFile ?: tempDir, "${partFile.name}$META_FILE_EXTENSION")
+    private fun getMetaFile(partFile: File): File = File(partFile.parentFile ?: tempDir, "${partFile.name}$META_FILE_EXTENSION")
 
-    private fun writeMetadata(metaFile: File, fileId: String, fileName: String, expectedSize: Long) {
+    private fun writeMetadata(
+        metaFile: File,
+        fileId: String,
+        fileName: String,
+        expectedSize: Long,
+    ) {
         try {
             metaFile.writeText("$fileId|$fileName|$expectedSize|${System.currentTimeMillis()}")
         } catch (e: Exception) {
@@ -1454,7 +1634,7 @@ class StorageManager(private val context: Context) {
         metaFile: File,
         expectedFileId: String,
         expectedFileName: String,
-        expectedSize: Long
+        expectedSize: Long,
     ): Boolean {
         if (!metaFile.exists()) return true // Graceful backward compatibility if meta absent
         return try {

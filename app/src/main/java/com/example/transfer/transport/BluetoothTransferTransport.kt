@@ -19,9 +19,8 @@ import java.io.BufferedOutputStream
 import java.util.UUID
 
 class BluetoothTransferTransport(
-    private val bluetoothAdapter: BluetoothAdapter?
+    private val bluetoothAdapter: BluetoothAdapter?,
 ) : TransferTransport {
-
     companion object {
         private const val TAG = "BluetoothTransport"
         val DROPSEND_BT_UUID: UUID = UUID.fromString("fa87c0d0-afac-11de-8a39-0800200c9a66")
@@ -35,21 +34,25 @@ class BluetoothTransferTransport(
     private var inputStream: BufferedInputStream? = null
     private var outputStream: BufferedOutputStream? = null
 
-    private val _incomingMessages = MutableSharedFlow<ProtocolMessage>(
-        replay = 0,
-        extraBufferCapacity = 64,
-        onBufferOverflow = BufferOverflow.SUSPEND
-    )
+    private val _incomingMessages =
+        MutableSharedFlow<ProtocolMessage>(
+            replay = 0,
+            extraBufferCapacity = 64,
+            onBufferOverflow = BufferOverflow.SUSPEND,
+        )
 
     @Volatile
     private var isRunning = false
 
     @SuppressLint("MissingPermission")
-    override suspend fun connect(targetAddress: String, port: Int) = withContext(Dispatchers.IO) {
+    override suspend fun connect(
+        targetAddress: String,
+        port: Int,
+    ) = withContext(Dispatchers.IO) {
         disconnect()
         val adapter = bluetoothAdapter ?: throw IllegalStateException("Bluetooth is not available")
         val device: BluetoothDevice = adapter.getRemoteDevice(targetAddress)
-        
+
         Log.d(TAG, "Connecting to Bluetooth RFCOMM device ${device.address}...")
         adapter.cancelDiscovery()
 
@@ -62,7 +65,8 @@ class BluetoothTransferTransport(
             Log.w(TAG, "Insecure RFCOMM failed (${e.message}), trying secure RFCOMM...")
             try {
                 socket?.close()
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
 
             // 2. Fallback to standard RFCOMM
             socket = device.createRfcommSocketToServiceRecord(DROPSEND_BT_UUID)
@@ -78,38 +82,41 @@ class BluetoothTransferTransport(
     }
 
     @SuppressLint("MissingPermission")
-    override suspend fun startServer(port: Int): Int = withContext(Dispatchers.IO) {
-        disconnect()
-        val adapter = bluetoothAdapter ?: throw IllegalStateException("Bluetooth is not available")
-        Log.d(TAG, "Starting Bluetooth RFCOMM server...")
-        try {
-            serverSocket = adapter.listenUsingInsecureRfcommWithServiceRecord("DropSend", DROPSEND_BT_UUID)
-        } catch (e: Exception) {
-            Log.w(TAG, "Insecure server socket failed (${e.message}), trying secure RFCOMM server...")
-            serverSocket = adapter.listenUsingRfcommWithServiceRecord("DropSend", DROPSEND_BT_UUID)
+    override suspend fun startServer(port: Int): Int =
+        withContext(Dispatchers.IO) {
+            disconnect()
+            val adapter = bluetoothAdapter ?: throw IllegalStateException("Bluetooth is not available")
+            Log.d(TAG, "Starting Bluetooth RFCOMM server...")
+            try {
+                serverSocket = adapter.listenUsingInsecureRfcommWithServiceRecord("DropSend", DROPSEND_BT_UUID)
+            } catch (e: Exception) {
+                Log.w(TAG, "Insecure server socket failed (${e.message}), trying secure RFCOMM server...")
+                serverSocket = adapter.listenUsingRfcommWithServiceRecord("DropSend", DROPSEND_BT_UUID)
+            }
+            0
         }
-        0
-    }
 
-    override suspend fun acceptConnection() = withContext(Dispatchers.IO) {
-        val server = serverSocket ?: throw IllegalStateException("Bluetooth Server is not initialized")
-        Log.d(TAG, "Waiting for incoming Bluetooth RFCOMM connection...")
-        val socket = server.accept()
+    override suspend fun acceptConnection() =
+        withContext(Dispatchers.IO) {
+            val server = serverSocket ?: throw IllegalStateException("Bluetooth Server is not initialized")
+            Log.d(TAG, "Waiting for incoming Bluetooth RFCOMM connection...")
+            val socket = server.accept()
 
-        activeSocket = socket
-        inputStream = BufferedInputStream(socket.inputStream, BUFFER_SIZE)
-        outputStream = BufferedOutputStream(socket.outputStream, BUFFER_SIZE)
-        isRunning = true
+            activeSocket = socket
+            inputStream = BufferedInputStream(socket.inputStream, BUFFER_SIZE)
+            outputStream = BufferedOutputStream(socket.outputStream, BUFFER_SIZE)
+            isRunning = true
 
-        startReadLoop()
-    }
-
-    override suspend fun send(message: ProtocolMessage) = withContext(Dispatchers.IO) {
-        val out = outputStream ?: throw IllegalStateException("Bluetooth output stream unavailable")
-        synchronized(out) {
-            message.writeToStream(out)
+            startReadLoop()
         }
-    }
+
+    override suspend fun send(message: ProtocolMessage) =
+        withContext(Dispatchers.IO) {
+            val out = outputStream ?: throw IllegalStateException("Bluetooth output stream unavailable")
+            synchronized(out) {
+                message.writeToStream(out)
+            }
+        }
 
     override fun incomingMessages(): Flow<ProtocolMessage> = _incomingMessages.asSharedFlow()
 
@@ -135,28 +142,31 @@ class BluetoothTransferTransport(
         }, "DropSend-BluetoothReader").start()
     }
 
-    override suspend fun disconnect() = withContext(Dispatchers.IO) {
-        isRunning = false
-        try {
-            inputStream?.close()
-        } catch (_: Exception) {}
-        try {
-            outputStream?.close()
-        } catch (_: Exception) {}
-        try {
-            activeSocket?.close()
-        } catch (_: Exception) {}
-        try {
-            serverSocket?.close()
-        } catch (_: Exception) {}
+    override suspend fun disconnect() =
+        withContext(Dispatchers.IO) {
+            isRunning = false
+            try {
+                inputStream?.close()
+            } catch (_: Exception) {
+            }
+            try {
+                outputStream?.close()
+            } catch (_: Exception) {
+            }
+            try {
+                activeSocket?.close()
+            } catch (_: Exception) {
+            }
+            try {
+                serverSocket?.close()
+            } catch (_: Exception) {
+            }
 
-        inputStream = null
-        outputStream = null
-        activeSocket = null
-        serverSocket = null
-    }
+            inputStream = null
+            outputStream = null
+            activeSocket = null
+            serverSocket = null
+        }
 
-    override fun isConnected(): Boolean {
-        return isRunning && activeSocket?.isConnected == true
-    }
+    override fun isConnected(): Boolean = isRunning && activeSocket?.isConnected == true
 }

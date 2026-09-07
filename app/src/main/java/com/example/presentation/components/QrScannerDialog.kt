@@ -77,20 +77,21 @@ import java.util.concurrent.Executors
 fun QrScannerDialog(
     onQrScanned: (String) -> Unit,
     onDismiss: () -> Unit,
-    onManualInputClick: () -> Unit
+    onManualInputClick: () -> Unit,
 ) {
     val context = LocalContext.current
     var hasCameraPermission by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED,
         )
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasCameraPermission = granted
-    }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            hasCameraPermission = granted
+        }
 
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
@@ -100,32 +101,35 @@ fun QrScannerDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = Color.Black.copy(alpha = 0.95f)
+            color = Color.Black.copy(alpha = 0.95f),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 // Top Header Row
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color.White.copy(alpha = 0.15f), CircleShape)
+                        modifier =
+                            Modifier
+                                .size(40.dp)
+                                .background(Color.White.copy(alpha = 0.15f), CircleShape),
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                     }
@@ -133,7 +137,7 @@ fun QrScannerDialog(
                     Text(
                         text = "Scan Receiver QR",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
+                        color = Color.White,
                     )
 
                     Spacer(modifier = Modifier.size(40.dp))
@@ -142,17 +146,18 @@ fun QrScannerDialog(
                 // Camera Scanner Reticle Area
                 if (hasCameraPermission) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.85f)
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(24.dp))
-                            .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(24.dp)),
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(0.85f)
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(24.dp))
+                                .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(24.dp)),
+                        contentAlignment = Alignment.Center,
                     ) {
                         CameraPreviewWithAnalyzer(
                             onQrDecoded = { qrText ->
                                 onQrScanned(qrText)
-                            }
+                            },
                         )
 
                         // Laser Scanner Animation
@@ -160,62 +165,65 @@ fun QrScannerDialog(
                         val laserOffset by infiniteTransition.animateFloat(
                             initialValue = 0f,
                             targetValue = 1f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(durationMillis = 2000, easing = LinearEasing),
-                                repeatMode = RepeatMode.Reverse
-                            ),
-                            label = "laser_anim"
+                            animationSpec =
+                                infiniteRepeatable(
+                                    animation = tween(durationMillis = 2000, easing = LinearEasing),
+                                    repeatMode = RepeatMode.Reverse,
+                                ),
+                            label = "laser_anim",
                         )
 
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(2.dp)
-                                .align(Alignment.TopCenter)
-                                .padding(top = (laserOffset * 220).dp)
-                                .background(
-                                    Brush.horizontalGradient(
-                                        listOf(
-                                            Color.Transparent,
-                                            MaterialTheme.colorScheme.primary,
-                                            Color.White,
-                                            MaterialTheme.colorScheme.primary,
-                                            Color.Transparent
-                                        )
-                                    )
-                                )
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(2.dp)
+                                    .align(Alignment.TopCenter)
+                                    .padding(top = (laserOffset * 220).dp)
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(
+                                                Color.Transparent,
+                                                MaterialTheme.colorScheme.primary,
+                                                Color.White,
+                                                MaterialTheme.colorScheme.primary,
+                                                Color.Transparent,
+                                            ),
+                                        ),
+                                    ),
                         )
                     }
                 } else {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Icon(
                             imageVector = Icons.Default.QrCodeScanner,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(64.dp)
+                            modifier = Modifier.size(64.dp),
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Camera Permission Required",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            color = Color.White,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "Grant camera access to scan the receiver's QR code and connect instantly without shared Wi-Fi.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.7f),
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
                         )
                         Spacer(modifier = Modifier.height(20.dp))
                         Button(
                             onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         ) {
                             Text("Grant Permission")
                         }
@@ -224,17 +232,18 @@ fun QrScannerDialog(
 
                 // Instructions & Fallback Action
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 24.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     Text(
                         text = "Point camera at the QR code displayed on the Receiver device screen.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.8f),
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
                     )
 
                     OutlinedButton(
@@ -244,7 +253,7 @@ fun QrScannerDialog(
                         },
                         modifier = Modifier.fillMaxWidth(0.7f),
                         shape = RoundedCornerShape(20.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                     ) {
                         Text("Enter IP / SSID Manually")
                     }
@@ -255,9 +264,7 @@ fun QrScannerDialog(
 }
 
 @Composable
-private fun CameraPreviewWithAnalyzer(
-    onQrDecoded: (String) -> Unit
-) {
+private fun CameraPreviewWithAnalyzer(onQrDecoded: (String) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -277,13 +284,16 @@ private fun CameraPreviewWithAnalyzer(
             cameraProviderFuture.addListener({
                 try {
                     val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
+                    val preview =
+                        Preview.Builder().build().also {
+                            it.setSurfaceProvider(previewView.surfaceProvider)
+                        }
 
-                    val imageAnalysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
+                    val imageAnalysis =
+                        ImageAnalysis
+                            .Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build()
 
                     val reader = MultiFormatReader()
 
@@ -309,7 +319,7 @@ private fun CameraPreviewWithAnalyzer(
                         lifecycleOwner,
                         cameraSelector,
                         preview,
-                        imageAnalysis
+                        imageAnalysis,
                     )
                 } catch (e: Exception) {
                     Log.e("CameraPreview", "Camera binding failed", e)
@@ -318,11 +328,14 @@ private fun CameraPreviewWithAnalyzer(
 
             previewView
         },
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
     )
 }
 
-private fun decodeQrFromImageProxy(imageProxy: ImageProxy, reader: MultiFormatReader): String? {
+private fun decodeQrFromImageProxy(
+    imageProxy: ImageProxy,
+    reader: MultiFormatReader,
+): String? {
     val plane = imageProxy.planes.firstOrNull() ?: return null
     val buffer = plane.buffer
     val data = ByteArray(buffer.remaining())
@@ -331,16 +344,17 @@ private fun decodeQrFromImageProxy(imageProxy: ImageProxy, reader: MultiFormatRe
     val width = imageProxy.width
     val height = imageProxy.height
 
-    val source = PlanarYUVLuminanceSource(
-        data,
-        width,
-        height,
-        0,
-        0,
-        width,
-        height,
-        false
-    )
+    val source =
+        PlanarYUVLuminanceSource(
+            data,
+            width,
+            height,
+            0,
+            0,
+            width,
+            height,
+            false,
+        )
     val bitmap = BinaryBitmap(HybridBinarizer(source))
 
     return try {
