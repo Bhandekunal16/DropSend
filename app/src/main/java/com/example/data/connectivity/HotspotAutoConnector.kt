@@ -580,7 +580,10 @@ class HotspotAutoConnector(
                 )
             }
 
-            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
+            override fun onLinkPropertiesChanged(
+                network: Network,
+                linkProperties: LinkProperties,
+            ) {
                 if (!isCurrentAttempt(attemptId)) {
                     return
                 }
@@ -622,8 +625,16 @@ class HotspotAutoConnector(
     private fun extractGatewayIp(linkProps: LinkProperties?) {
         try {
             val gateway =
-                linkProps?.routes?.firstOrNull { it.isDefaultRoute && it.gateway != null }?.gateway?.hostAddress
-                    ?: linkProps?.routes?.firstOrNull { it.gateway != null }?.gateway?.hostAddress
+                linkProps
+                    ?.routes
+                    ?.firstOrNull { it.isDefaultRoute && it.gateway != null }
+                    ?.gateway
+                    ?.hostAddress
+                    ?: linkProps
+                        ?.routes
+                        ?.firstOrNull { it.gateway != null }
+                        ?.gateway
+                        ?.hostAddress
             if (!gateway.isNullOrBlank() && gateway != "0.0.0.0") {
                 lastConnectedGatewayIp = gateway
                 Log.d(TAG, "Discovered hotspot gateway IP: $gateway")

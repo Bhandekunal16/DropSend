@@ -14,7 +14,6 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class LocalHotspotManagerTest {
-
     private lateinit var context: Context
     private lateinit var hotspotManager: LocalHotspotManager
 
@@ -26,14 +25,15 @@ class LocalHotspotManagerTest {
 
     @Test
     fun `test createHotspotInfo with discovered IP includes ip parameter in QR payload`() {
-        val info = hotspotManager.createHotspotInfo(
-            ssid = "Direct-DropSend",
-            pass = "secret123",
-            ip = "192.168.49.1",
-            deviceId = "REV-49.1",
-            deviceName = "Pixel 8",
-            isActive = true,
-        )
+        val info =
+            hotspotManager.createHotspotInfo(
+                ssid = "Direct-DropSend",
+                pass = "secret123",
+                ip = "192.168.49.1",
+                deviceId = "REV-49.1",
+                deviceName = "Pixel 8",
+                isActive = true,
+            )
 
         assertEquals("192.168.49.1", info.ipAddress)
         assertTrue(info.connectionPayload.contains("&ip=192.168.49.1"))
@@ -44,15 +44,16 @@ class LocalHotspotManagerTest {
     @Test
     fun `test createHotspotInfo when IP discovery fails does not publish fake 192_168_43_1`() {
         // When IP discovery fails, ip is empty string
-        val info = hotspotManager.createHotspotInfo(
-            ssid = "Direct-DropSend",
-            pass = "secret123",
-            ip = "",
-            deviceId = "REV-HOTSPOT",
-            deviceName = "Pixel 8",
-            isActive = true,
-            errorMessage = "IP discovery timed out",
-        )
+        val info =
+            hotspotManager.createHotspotInfo(
+                ssid = "Direct-DropSend",
+                pass = "secret123",
+                ip = "",
+                deviceId = "REV-HOTSPOT",
+                deviceName = "Pixel 8",
+                isActive = true,
+                errorMessage = "IP discovery timed out",
+            )
 
         assertEquals("", info.ipAddress)
         // Dropsend payload must NOT contain a fake 192.168.43.1

@@ -228,14 +228,21 @@ class LocalHotspotManager(
 
                         val errorMsg =
                             when (reason) {
-                                WifiManager.LocalOnlyHotspotCallback.ERROR_NO_CHANNEL ->
+                                WifiManager.LocalOnlyHotspotCallback.ERROR_NO_CHANNEL -> {
                                     "No Wi-Fi channel available for Direct Hotspot."
-                                WifiManager.LocalOnlyHotspotCallback.ERROR_TETHERING_DISALLOWED ->
+                                }
+
+                                WifiManager.LocalOnlyHotspotCallback.ERROR_TETHERING_DISALLOWED -> {
                                     "Hotspot is disallowed by device policy."
-                                WifiManager.LocalOnlyHotspotCallback.ERROR_INCOMPATIBLE_MODE ->
+                                }
+
+                                WifiManager.LocalOnlyHotspotCallback.ERROR_INCOMPATIBLE_MODE -> {
                                     "Wi-Fi mode incompatible with Direct Hotspot."
-                                else ->
+                                }
+
+                                else -> {
                                     "Direct Hotspot unavailable on this device."
+                                }
                             }
 
                         publishFallback(
