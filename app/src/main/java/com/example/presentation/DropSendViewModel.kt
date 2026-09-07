@@ -366,9 +366,11 @@ class DropSendViewModel(
             return
         }
 
+        cleanupTransport()
+
         val initialStatus =
             if (params.ssid.isNotBlank()) {
-                "Connecting to Receiver's Hotspot (${params.ssid})..."
+                "Connecting to Wi-Fi hotspot (${params.ssid})..."
             } else {
                 "Connecting directly to ${params.deviceName}..."
             }
@@ -385,47 +387,89 @@ class DropSendViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             var hotspotConnected = false
             if (params.ssid.isNotBlank()) {
+                Log.d(TAG, "Selected Wi-Fi network: ${params.ssid}")
                 hotspotConnected =
                     hotspotAutoConnector.connectToHotspotNetwork(params) { status ->
                         _uiState.update { it.copy(statusMessage = status) }
                     }
                 if (!hotspotConnected) {
-                    Log.w(TAG, "Hotspot association with ${params.ssid} was not established; falling back to direct network IPs...")
+                    Log.w(TAG, "Wi-Fi association with ${params.ssid} failed")
+                    if (params.ipAddress.isBlank() && params.alternateIps.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            _uiState.update {
+                                it.copy(
+                                    sessionState = SessionState.FAILED,
+                                    errorMessage = "Could not connect to ${params.deviceName}'s Wi-Fi hotspot (${params.ssid}). Please verify credentials and distance.",
+                                )
+                            }
+                        }
+                        return@launch
+                    }
+                    Log.d(TAG, "Wi-Fi hotspot connection failed; attempting candidate direct IP addresses...")
+                } else {
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(
+                                statusMessage = "Wi-Fi connected! Resolving receiver gateway...",
+                            )
+                        }
+                    }
                 }
             }
 
-            // Gather candidate IP addresses to try
+            // Gather candidate IP addresses to try in priority order:
+            // 1. actual gateway IP discovered from the connected Android Network
+            // 2. IP supplied by the DropSend QR
+            // 3. alternateIps supplied by the QR
             val candidates = mutableListOf<String>()
-            hotspotAutoConnector.lastConnectedGatewayIp?.let { candidates.add(it) }
+            val discoveredGateway = hotspotAutoConnector.lastConnectedGatewayIp?.takeIf { it.isNotBlank() }
+            if (discoveredGateway != null) {
+                candidates.add(discoveredGateway)
+                Log.d(TAG, "Discovered hotspot gateway IP prioritized: $discoveredGateway")
+            }
             if (params.ipAddress.isNotBlank()) {
                 candidates.add(params.ipAddress)
             }
-            candidates.addAll(params.alternateIps)
-            // If connected to a receiver hotspot, include common SoftAP gateway IPs
-            if (params.ssid.isNotBlank() && hotspotConnected) {
-                candidates.add("192.168.49.1")
-                candidates.add("192.168.43.1")
-                candidates.add("192.168.50.1")
+            candidates.addAll(params.alternateIps.filter { it.isNotBlank() })
+
+            val uniqueCandidates = candidates.distinct()
+            Log.d(TAG, "TCP candidate IPs to attempt (in priority order): $uniqueCandidates")
+
+            if (uniqueCandidates.isEmpty()) {
+                Log.e(TAG, "No candidate IP addresses available for target ${params.deviceName}")
+                withContext(Dispatchers.Main) {
+                    _uiState.update {
+                        it.copy(
+                            sessionState = SessionState.FAILED,
+                            errorMessage = "Could not discover receiver IP address from Wi-Fi or QR code.",
+                        )
+                    }
+                }
+                return@launch
             }
-            val uniqueCandidates = candidates.distinct().filter { it.isNotBlank() }
 
             var connectedTransport: TcpTransferTransport? = null
             var lastConnectException: Exception? = null
 
             for (targetIp in uniqueCandidates) {
-                try {
-                    withContext(Dispatchers.Main) {
-                        _uiState.update {
-                            it.copy(statusMessage = "Connecting to ${params.deviceName} ($targetIp)...")
-                        }
+                withContext(Dispatchers.Main) {
+                    _uiState.update {
+                        it.copy(
+                            sessionState = SessionState.CONNECTING,
+                            statusMessage = "Connecting TCP socket to ${params.deviceName} ($targetIp:${params.port})...",
+                        )
                     }
-                    val transport = TcpTransferTransport(TransportType.WIFI_DIRECT)
+                }
+                Log.d(TAG, "Attempting TCP connection to $targetIp:${params.port}...")
+                val transport = TcpTransferTransport(TransportType.WIFI_DIRECT)
+                try {
                     transport.connect(targetIp, params.port)
                     connectedTransport = transport
                     activeTransport = transport
+                    Log.d(TAG, "TCP connection successfully established to $targetIp:${params.port}")
                     break
                 } catch (e: Exception) {
-                    Log.w(TAG, "Candidate connection failed for $targetIp:${params.port}: ${e.message}")
+                    Log.w(TAG, "TCP candidate connection attempt failed for $targetIp:${params.port}: ${e.message}", e)
                     lastConnectException = e
                 }
             }
@@ -435,20 +479,20 @@ class DropSendViewModel(
                     _uiState.update {
                         it.copy(
                             sessionState = SessionState.AUTHENTICATING,
-                            statusMessage = "Connected! Establishing encrypted handshake...",
+                            statusMessage = "TCP connected! Initiating encrypted handshake...",
                         )
                     }
                     listenToIncomingMessages(connectedTransport)
                     performSenderHandshake(connectedTransport, directDevice)
                 }
             } else {
-                Log.e(TAG, "Failed connecting to QR target ${params.deviceName} on any candidate IP", lastConnectException)
+                Log.e(TAG, "Failed connecting TCP to ${params.deviceName} across candidate IPs: $uniqueCandidates", lastConnectException)
                 withContext(Dispatchers.Main) {
                     val msg =
                         if (params.ssid.isNotBlank() && !hotspotConnected) {
                             "Could not connect to ${params.deviceName}'s Wi-Fi hotspot (${params.ssid}). Make sure both devices are nearby or connected to the same Wi-Fi network."
                         } else {
-                            "Could not connect to ${params.deviceName}. Make sure DropSend receiver mode is open on the other device."
+                            "TCP connection to ${params.deviceName} failed across all candidate addresses (${uniqueCandidates.joinToString()}). Make sure DropSend receiver mode is open on the other device."
                         }
                     _uiState.update {
                         it.copy(
@@ -520,6 +564,7 @@ class DropSendViewModel(
             return
         }
 
+        cleanupTransport()
         discoveryManager.stopDiscovery()
         _uiState.update {
             it.copy(
@@ -576,6 +621,7 @@ class DropSendViewModel(
         val myPubKeyBase64 = Base64.encodeToString(ecKeyPair.public.encoded, Base64.NO_WRAP)
         sessionToken = SessionCrypto.generateSessionToken()
 
+        Log.d(TAG, "Initiating protocol handshake with ${device.name}")
         // Send AuthHandshake
         transport.send(
             ProtocolMessage.AuthHandshake(
@@ -584,6 +630,7 @@ class DropSendViewModel(
                 publicKeyBase64 = myPubKeyBase64,
             ),
         )
+        Log.d(TAG, "AuthHandshake transmitted and flushed to ${device.name}")
     }
 
     /**
@@ -687,6 +734,7 @@ class DropSendViewModel(
     ) {
         when (message) {
             is ProtocolMessage.AuthHandshake -> {
+                Log.d(TAG, "AuthHandshake received from sender: ${message.senderId}")
                 // Receiver receives sender's public key
                 val peerPubKeyBytes = Base64.decode(message.publicKeyBase64, Base64.NO_WRAP)
                 sessionToken = message.sessionToken
@@ -713,6 +761,7 @@ class DropSendViewModel(
                         verificationCode = verificationCode,
                     ),
                 )
+                Log.d(TAG, "AuthHandshakeAck transmitted and flushed to sender: ${message.senderId}")
 
                 withContext(Dispatchers.Main) {
                     _uiState.update {
@@ -725,6 +774,7 @@ class DropSendViewModel(
             }
 
             is ProtocolMessage.AuthHandshakeAck -> {
+                Log.d(TAG, "AuthHandshakeAck received from receiver: ${message.receiverId}")
                 // Sender completes ECDH exchange
                 val peerPubKeyBytes = Base64.decode(message.publicKeyBase64, Base64.NO_WRAP)
                 sessionKey =
@@ -742,7 +792,7 @@ class DropSendViewModel(
                     )
 
                 if (expectedCode != message.verificationCode) {
-                    Log.w(TAG, "Verification code mismatch: potential MITM attack or key desync!")
+                    Log.w(TAG, "Handshake verification failed: code mismatch with receiver: ${message.receiverId}")
                     withContext(Dispatchers.Main) {
                         _uiState.update {
                             it.copy(
@@ -754,6 +804,8 @@ class DropSendViewModel(
                     cleanupTransport()
                     return
                 }
+
+                Log.d(TAG, "Handshake successfully verified with receiver: ${message.receiverId}")
 
                 val totalSize = _uiState.value.selectedFiles.sumOf { it.sizeBytes }
                 val metadataList =

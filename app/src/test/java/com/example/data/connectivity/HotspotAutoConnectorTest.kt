@@ -83,21 +83,31 @@ class HotspotAutoConnectorTest {
         assertNotNull(params)
         assertEquals("DropSend_AP", params?.ssid)
         assertEquals("secret", params?.passphrase)
-        assertEquals("192.168.43.1", params?.ipAddress)
+        assertEquals("", params?.ipAddress)
         assertEquals(8888, params?.port)
         assertEquals("Nearby Receiver", params?.deviceName)
-        assertEquals("REV-43.1", params?.deviceId)
+        assertEquals("REV-HOTSPOT", params?.deviceId)
     }
 
     @Test
-    fun `test parseQrCode with standard WIFI QR format`() {
+    fun `test parseQrCode with dropsend URI containing IP and alternate IPs`() {
+        val qr = "dropsend://connect?ssid=DropSend_AP&pass=secret&ip=192.168.49.1&alt=192.168.1.5,10.0.0.4"
+        val params = connector.parseQrCode(qr)
+
+        assertNotNull(params)
+        assertEquals("192.168.49.1", params?.ipAddress)
+        assertEquals(listOf("192.168.1.5", "10.0.0.4"), params?.alternateIps)
+    }
+
+    @Test
+    fun `test parseQrCode with standard WIFI QR format does not force 192_168_43_1`() {
         val qr = "WIFI:S:MyLocalHotspot;T:WPA;P:MySecretPass;; "
         val params = connector.parseQrCode(qr)
 
         assertNotNull(params)
         assertEquals("MyLocalHotspot", params?.ssid)
         assertEquals("MySecretPass", params?.passphrase)
-        assertEquals("192.168.43.1", params?.ipAddress)
+        assertEquals("", params?.ipAddress)
         assertEquals(8888, params?.port)
         assertEquals("MyLocalHotspot", params?.deviceName)
         assertEquals("spot", params?.deviceId)
@@ -202,7 +212,7 @@ class HotspotAutoConnectorTest {
             val result = connectionJob.await()
             assertTrue(result)
             assertTrue(connector.isProcessNetworkBound)
-            assertTrue(statuses.last().contains("Connected to hotspot"))
+            assertTrue(statuses.last().contains("Wi-Fi connected"))
 
             // Cleanup
             connector.release()

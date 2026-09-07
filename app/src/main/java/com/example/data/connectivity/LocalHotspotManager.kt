@@ -6,6 +6,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -164,20 +165,41 @@ class LocalHotspotManager(
                                 return@launch
                             }
 
-                            val info =
-                                createHotspotInfo(
-                                    ssid = credentials.first,
-                                    pass = credentials.second,
-                                    ip = ip ?: DEFAULT_IP,
-                                    deviceId = deviceId,
-                                    deviceName = deviceName,
-                                )
+                            if (ip != null) {
+                                val info =
+                                    createHotspotInfo(
+                                        ssid = credentials.first,
+                                        pass = credentials.second,
+                                        ip = ip,
+                                        deviceId = deviceId,
+                                        deviceName = deviceName,
+                                        isActive = true,
+                                    )
 
-                            publish(
-                                info = info,
-                                generation = currentGeneration,
-                                onStarted = onStarted,
-                            )
+                                publish(
+                                    info = info,
+                                    generation = currentGeneration,
+                                    onStarted = onStarted,
+                                )
+                            } else {
+                                Log.w(TAG, "Local hotspot IP discovery failed after all retry attempts.")
+                                val info =
+                                    createHotspotInfo(
+                                        ssid = credentials.first,
+                                        pass = credentials.second,
+                                        ip = "",
+                                        deviceId = deviceId,
+                                        deviceName = deviceName,
+                                        isActive = true,
+                                        errorMessage = "Hotspot started but IP discovery timed out. Connecting peers will resolve the gateway IP automatically.",
+                                    )
+
+                                publish(
+                                    info = info,
+                                    generation = currentGeneration,
+                                    onStarted = onStarted,
+                                )
+                            }
                         }
                     }
 
@@ -425,7 +447,8 @@ class LocalHotspotManager(
         }
     }
 
-    private fun createHotspotInfo(
+    @androidx.annotation.VisibleForTesting
+    internal fun createHotspotInfo(
         ssid: String,
         pass: String,
         ip: String,
@@ -441,10 +464,11 @@ class LocalHotspotManager(
             if (isActive && ssid.isNotBlank()) {
                 val encodedSsid = ssid.encodeUri()
                 val encodedPass = pass.encodeUri()
+                val ipParam = if (ip.isNotBlank()) "&ip=${ip.encodeUri()}" else ""
                 "dropsend://connect" +
                     "?ssid=$encodedSsid" +
                     "&pass=$encodedPass" +
-                    "&ip=${ip.encodeUri()}" +
+                    ipParam +
                     "&port=$DEFAULT_PORT" +
                     "&dev=$encodedDeviceName" +
                     "&id=$encodedDeviceId"

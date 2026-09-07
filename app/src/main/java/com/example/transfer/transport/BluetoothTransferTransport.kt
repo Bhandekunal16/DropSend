@@ -115,6 +115,7 @@ class BluetoothTransferTransport(
             val out = outputStream ?: throw IllegalStateException("Bluetooth output stream unavailable")
             synchronized(out) {
                 message.writeToStream(out)
+                out.flush()
             }
         }
 

@@ -2,6 +2,7 @@ package com.example.data.connectivity
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
@@ -117,7 +118,7 @@ class HotspotAutoConnector(
                 uri
                     .getQueryParameter("ip")
                     ?.takeIf(::isValidIpv4)
-                    ?: DEFAULT_IP
+                    .orEmpty()
 
             val port =
                 uri
@@ -132,7 +133,7 @@ class HotspotAutoConnector(
 
             val deviceId =
                 uri.getQueryParameter("id")
-                    ?: "REV-${ip.takeLast(4)}"
+                    ?: if (ip.isNotBlank()) "REV-${ip.takeLast(4)}" else "REV-HOTSPOT"
 
             val altParam = uri.getQueryParameter("alt").orEmpty()
             val alternateIps =
@@ -281,7 +282,7 @@ class HotspotAutoConnector(
         return QrConnectionParams(
             ssid = ssid,
             passphrase = passphrase,
-            ipAddress = DEFAULT_IP,
+            ipAddress = "",
             port = DEFAULT_PORT,
             deviceName = ssid.ifBlank { "Nearby Hotspot" },
             deviceId = ssid.takeLast(4),
@@ -411,6 +412,7 @@ class HotspotAutoConnector(
             }
         }
 
+        Log.d(TAG, "Initiating Wi-Fi connection to SSID: ${params.ssid}")
         emitStatus(
             "Connecting to Receiver's Hotspot: ${params.ssid}...",
         )
@@ -563,27 +565,12 @@ class HotspotAutoConnector(
                 }
 
                 isProcessBound = true
+                Log.d(TAG, "Process successfully bound to Wi-Fi network: $network")
 
-                try {
-                    val linkProps = cm.getLinkProperties(network)
-                    val gateway =
-                        linkProps?.routes?.firstOrNull { it.isDefaultRoute && it.gateway != null }?.gateway?.hostAddress
-                            ?: linkProps?.routes?.firstOrNull { it.gateway != null }?.gateway?.hostAddress
-                    if (!gateway.isNullOrBlank() && gateway != "0.0.0.0") {
-                        lastConnectedGatewayIp = gateway
-                        Log.d(TAG, "Discovered hotspot gateway IP: $gateway")
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not extract gateway IP from LinkProperties: ${e.message}")
-                }
-
-                Log.d(
-                    TAG,
-                    "Receiver hotspot connected: $network",
-                )
+                extractGatewayIp(cm.getLinkProperties(network))
 
                 emitStatus(
-                    "Connected to hotspot! Establishing secure channel...",
+                    "Wi-Fi connected! Resolving receiver gateway...",
                 )
 
                 resumeAttempt(
@@ -591,6 +578,13 @@ class HotspotAutoConnector(
                     continuation = continuation,
                     success = true,
                 )
+            }
+
+            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
+                if (!isCurrentAttempt(attemptId)) {
+                    return
+                }
+                extractGatewayIp(linkProperties)
             }
 
             override fun onUnavailable() {
@@ -622,6 +616,20 @@ class HotspotAutoConnector(
 
                 unbindProcessNetwork()
             }
+        }
+    }
+
+    private fun extractGatewayIp(linkProps: LinkProperties?) {
+        try {
+            val gateway =
+                linkProps?.routes?.firstOrNull { it.isDefaultRoute && it.gateway != null }?.gateway?.hostAddress
+                    ?: linkProps?.routes?.firstOrNull { it.gateway != null }?.gateway?.hostAddress
+            if (!gateway.isNullOrBlank() && gateway != "0.0.0.0") {
+                lastConnectedGatewayIp = gateway
+                Log.d(TAG, "Discovered hotspot gateway IP: $gateway")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not extract gateway IP from LinkProperties: ${e.message}")
         }
     }
 

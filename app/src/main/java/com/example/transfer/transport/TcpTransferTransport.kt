@@ -14,6 +14,7 @@ import java.io.BufferedOutputStream
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.atomic.AtomicLong
 
 class TcpTransferTransport(
     override val transportType: TransportType = TransportType.LOCAL_WIFI,
@@ -22,6 +23,7 @@ class TcpTransferTransport(
         private const val TAG = "TcpTransferTransport"
         private const val BUFFER_SIZE = 128 * 1024 // 128 KB
         private const val SOCKET_TIMEOUT_MS = 30_000
+        private const val CONNECT_TIMEOUT_MS = 5_000
     }
 
     private var serverSocket: ServerSocket? = null
@@ -39,25 +41,43 @@ class TcpTransferTransport(
     @Volatile
     private var isRunning = false
 
+    private val connectionGeneration = AtomicLong(0)
+
     override suspend fun connect(
         targetAddress: String,
         port: Int,
     ) = withContext(Dispatchers.IO) {
         disconnect()
-        Log.d(TAG, "Connecting to $targetAddress:$port ($transportType)...")
+        val generation = connectionGeneration.incrementAndGet()
+        Log.d(TAG, "Attempting TCP connection to $targetAddress:$port ($transportType)...")
+
         val socket = Socket()
-        socket.tcpNoDelay = true
-        socket.sendBufferSize = BUFFER_SIZE
-        socket.receiveBufferSize = BUFFER_SIZE
-        socket.soTimeout = SOCKET_TIMEOUT_MS
-        socket.connect(InetSocketAddress(targetAddress, port), 5_000)
+        try {
+            socket.tcpNoDelay = true
+            socket.keepAlive = true
+            socket.sendBufferSize = BUFFER_SIZE
+            socket.receiveBufferSize = BUFFER_SIZE
+            socket.soTimeout = SOCKET_TIMEOUT_MS
+            socket.connect(InetSocketAddress(targetAddress, port), CONNECT_TIMEOUT_MS)
+            Log.d(TAG, "TCP connection successfully established to $targetAddress:$port")
 
-        activeSocket = socket
-        inputStream = BufferedInputStream(socket.getInputStream(), BUFFER_SIZE)
-        outputStream = BufferedOutputStream(socket.getOutputStream(), BUFFER_SIZE)
-        isRunning = true
+            activeSocket = socket
+            val inStream = BufferedInputStream(socket.getInputStream(), BUFFER_SIZE)
+            val outStream = BufferedOutputStream(socket.getOutputStream(), BUFFER_SIZE)
+            inputStream = inStream
+            outputStream = outStream
+            isRunning = true
 
-        startReadLoop()
+            startReadLoop(socket, inStream, generation)
+        } catch (e: Exception) {
+            Log.e(TAG, "TCP connection failed to $targetAddress:$port", e)
+            try {
+                socket.close()
+            } catch (_: Exception) {
+            }
+            cleanupConnectionResources()
+            throw e
+        }
     }
 
     override suspend fun startServer(port: Int): Int =
@@ -68,6 +88,7 @@ class TcpTransferTransport(
             server.reuseAddress = true
             server.bind(InetSocketAddress(port))
             serverSocket = server
+            Log.d(TAG, "TCP server bound to local port ${server.localPort}")
             server.localPort
         }
 
@@ -76,78 +97,110 @@ class TcpTransferTransport(
             val server = serverSocket ?: throw IllegalStateException("Server socket is not initialized")
             Log.d(TAG, "Waiting for client connection on port ${server.localPort}...")
             val socket = server.accept()
-            socket.tcpNoDelay = true
-            socket.sendBufferSize = BUFFER_SIZE
-            socket.receiveBufferSize = BUFFER_SIZE
-            socket.soTimeout = SOCKET_TIMEOUT_MS
+            val generation = connectionGeneration.incrementAndGet()
+            try {
+                socket.tcpNoDelay = true
+                socket.keepAlive = true
+                socket.sendBufferSize = BUFFER_SIZE
+                socket.receiveBufferSize = BUFFER_SIZE
+                socket.soTimeout = SOCKET_TIMEOUT_MS
 
-            activeSocket = socket
-            inputStream = BufferedInputStream(socket.getInputStream(), BUFFER_SIZE)
-            outputStream = BufferedOutputStream(socket.getOutputStream(), BUFFER_SIZE)
-            isRunning = true
+                activeSocket = socket
+                val inStream = BufferedInputStream(socket.getInputStream(), BUFFER_SIZE)
+                val outStream = BufferedOutputStream(socket.getOutputStream(), BUFFER_SIZE)
+                inputStream = inStream
+                outputStream = outStream
+                isRunning = true
 
-            Log.d(TAG, "Client connected: ${socket.inetAddress.hostAddress}")
-            startReadLoop()
+                Log.d(TAG, "Client connected: ${socket.inetAddress?.hostAddress}:${socket.port}")
+                startReadLoop(socket, inStream, generation)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed initializing accepted client connection", e)
+                try {
+                    socket.close()
+                } catch (_: Exception) {
+                }
+                cleanupConnectionResources()
+                throw e
+            }
         }
 
-    override suspend fun send(message: ProtocolMessage) =
+    override suspend fun send(message: ProtocolMessage): Unit =
         withContext(Dispatchers.IO) {
             val out = outputStream ?: throw IllegalStateException("Socket output stream is not available")
+            val messageType = message.javaClass.simpleName
+            Log.d(TAG, "Sending protocol message: $messageType")
             synchronized(out) {
                 message.writeToStream(out)
+                out.flush()
             }
+            Log.d(TAG, "Flushed protocol message: $messageType")
+            Unit
         }
 
     override fun incomingMessages(): Flow<ProtocolMessage> = _incomingMessages.asSharedFlow()
 
-    private fun startReadLoop() {
+    private fun startReadLoop(
+        socket: Socket,
+        stream: BufferedInputStream,
+        generation: Long,
+    ) {
         Thread({
-            val stream = inputStream
             try {
-                while (isRunning && stream != null) {
+                while (isRunning && connectionGeneration.get() == generation && !socket.isClosed) {
                     val message = ProtocolMessage.readFromStream(stream)
                     if (message != null) {
+                        Log.d(TAG, "Received protocol message: ${message.javaClass.simpleName}")
                         _incomingMessages.tryEmit(message)
                     } else {
-                        // End of stream or connection closed
+                        Log.d(TAG, "Read loop reached EOF (remote connection closed)")
                         break
                     }
                 }
             } catch (e: Exception) {
-                if (isRunning) {
-                    Log.w(TAG, "Read loop terminated with error: ${e.message}")
+                if (isRunning && connectionGeneration.get() == generation && !socket.isClosed) {
+                    Log.w(TAG, "Read loop terminated unexpectedly with exception", e)
+                } else {
+                    Log.d(TAG, "Read loop closed after disconnect (${e.javaClass.simpleName}: ${e.message})")
                 }
             } finally {
-                isRunning = false
+                if (connectionGeneration.get() == generation) {
+                    isRunning = false
+                }
             }
-        }, "DropSend-TcpReader").start()
+        }, "DropSend-TcpReader-$generation").apply { isDaemon = true }.start()
     }
 
     override suspend fun disconnect() =
         withContext(Dispatchers.IO) {
+            connectionGeneration.incrementAndGet()
             isRunning = false
-            try {
-                inputStream?.close()
-            } catch (_: Exception) {
-            }
-            try {
-                outputStream?.close()
-            } catch (_: Exception) {
-            }
-            try {
-                activeSocket?.close()
-            } catch (_: Exception) {
-            }
+            cleanupConnectionResources()
             try {
                 serverSocket?.close()
             } catch (_: Exception) {
             }
-
-            inputStream = null
-            outputStream = null
-            activeSocket = null
             serverSocket = null
         }
+
+    private fun cleanupConnectionResources() {
+        try {
+            inputStream?.close()
+        } catch (_: Exception) {
+        }
+        try {
+            outputStream?.close()
+        } catch (_: Exception) {
+        }
+        try {
+            activeSocket?.close()
+        } catch (_: Exception) {
+        }
+
+        inputStream = null
+        outputStream = null
+        activeSocket = null
+    }
 
     override fun isConnected(): Boolean = isRunning && activeSocket?.isConnected == true && activeSocket?.isClosed == false
 }
