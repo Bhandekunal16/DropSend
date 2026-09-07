@@ -537,6 +537,7 @@ class ConnectivityMonitor(
                         WifiManager.WIFI_STATE_CHANGED_ACTION -> {
                             val wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)
                             if (wifiState == WifiManager.WIFI_STATE_DISABLED) {
+                                updateGeneration.incrementAndGet()
                                 cachedWifiOn = false
                                 currentNetwork = null
                                 cachedIpAddress = null

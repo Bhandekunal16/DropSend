@@ -50,7 +50,7 @@ class TcpTransferTransport(
         socket.sendBufferSize = BUFFER_SIZE
         socket.receiveBufferSize = BUFFER_SIZE
         socket.soTimeout = SOCKET_TIMEOUT_MS
-        socket.connect(InetSocketAddress(targetAddress, port), 10_000)
+        socket.connect(InetSocketAddress(targetAddress, port), 5_000)
 
         activeSocket = socket
         inputStream = BufferedInputStream(socket.getInputStream(), BUFFER_SIZE)
@@ -64,8 +64,9 @@ class TcpTransferTransport(
         withContext(Dispatchers.IO) {
             disconnect()
             Log.d(TAG, "Starting TCP server on port $port...")
-            val server = ServerSocket(port)
+            val server = ServerSocket()
             server.reuseAddress = true
+            server.bind(InetSocketAddress(port))
             serverSocket = server
             server.localPort
         }

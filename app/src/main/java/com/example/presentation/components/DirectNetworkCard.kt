@@ -258,18 +258,23 @@ fun DirectNetworkCard(
             )
 
             // 2. Network SSID Field
-            DirectNetworkInfoRow(
-                label = "NETWORK NAME",
-                value = ssid.ifBlank { "—" },
-                testTagPrefix = "ssid",
-                onCopy =
-                    if (ssid.isNotBlank()) {
-                        { copyToClipboard("DropSend Network", ssid, "Network name copied") }
-                    } else {
-                        null
-                    },
-                copyContentDescription = "Copy network name $ssid",
-            )
+            if (ssid.isNotBlank()) {
+                DirectNetworkInfoRow(
+                    label = "HOTSPOT SSID",
+                    value = ssid,
+                    testTagPrefix = "ssid",
+                    onCopy = { copyToClipboard("DropSend Network", ssid, "Network name copied") },
+                    copyContentDescription = "Copy network name $ssid",
+                )
+            } else {
+                DirectNetworkInfoRow(
+                    label = "NETWORK MODE",
+                    value = "Local Wi-Fi Network",
+                    testTagPrefix = "ssid",
+                    onCopy = null,
+                    copyContentDescription = "Local Wi-Fi Network",
+                )
+            }
 
             // 3. IP Address Field
             DirectNetworkInfoRow(

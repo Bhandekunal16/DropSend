@@ -232,7 +232,7 @@ class DropSendViewModel(
 
         // 1. Activate Local Hotspot for direct offline QR pairing
         localHotspotManager.startLocalHotspot(deviceId, _uiState.value.localDeviceName) { info ->
-            if (info.ipAddress.isNotBlank() && !ips.contains(info.ipAddress)) {
+            if (info.isActive && info.ipAddress.isNotBlank() && !ips.contains(info.ipAddress)) {
                 ips.add(0, info.ipAddress)
                 _uiState.update { it.copy(localIpAddresses = ips) }
             }
@@ -354,27 +354,83 @@ class DropSendViewModel(
                 isReadyToReceive = true,
             )
 
+        val isSimulated =
+            directDevice.id in setOf("DROP-DEMO", "DROP-9A14", "DROP-3B88", "DROP-7F20", "DROP-4C61") ||
+                directDevice.name.contains("Simulated", ignoreCase = true) ||
+                directDevice.name.contains("Virtual", ignoreCase = true) ||
+                directDevice.name.contains("Demo", ignoreCase = true) ||
+                params.deviceId.contains("DEMO", ignoreCase = true)
+
+        if (isSimulated) {
+            launchSenderSimulation(targetDevice = directDevice)
+            return
+        }
+
+        val initialStatus =
+            if (params.ssid.isNotBlank()) {
+                "Connecting to Receiver's Hotspot (${params.ssid})..."
+            } else {
+                "Connecting directly to ${params.deviceName}..."
+            }
+
         _uiState.update {
             it.copy(
                 targetDevice = directDevice,
                 sessionState = SessionState.CONNECTING,
-                statusMessage = "Connecting to Receiver's Direct Hotspot...",
+                statusMessage = initialStatus,
                 errorMessage = null,
             )
         }
 
         viewModelScope.launch(Dispatchers.IO) {
+            var hotspotConnected = false
             if (params.ssid.isNotBlank()) {
-                hotspotAutoConnector.connectToHotspotNetwork(params) { status ->
-                    _uiState.update { it.copy(statusMessage = status) }
+                hotspotConnected =
+                    hotspotAutoConnector.connectToHotspotNetwork(params) { status ->
+                        _uiState.update { it.copy(statusMessage = status) }
+                    }
+                if (!hotspotConnected) {
+                    Log.w(TAG, "Hotspot association with ${params.ssid} was not established; falling back to direct network IPs...")
                 }
             }
 
-            try {
-                val transport = TcpTransferTransport(TransportType.WIFI_DIRECT)
-                activeTransport = transport
-                transport.connect(params.ipAddress, params.port)
+            // Gather candidate IP addresses to try
+            val candidates = mutableListOf<String>()
+            hotspotAutoConnector.lastConnectedGatewayIp?.let { candidates.add(it) }
+            if (params.ipAddress.isNotBlank()) {
+                candidates.add(params.ipAddress)
+            }
+            candidates.addAll(params.alternateIps)
+            // If connected to a receiver hotspot, include common SoftAP gateway IPs
+            if (params.ssid.isNotBlank() && hotspotConnected) {
+                candidates.add("192.168.49.1")
+                candidates.add("192.168.43.1")
+                candidates.add("192.168.50.1")
+            }
+            val uniqueCandidates = candidates.distinct().filter { it.isNotBlank() }
 
+            var connectedTransport: TcpTransferTransport? = null
+            var lastConnectException: Exception? = null
+
+            for (targetIp in uniqueCandidates) {
+                try {
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(statusMessage = "Connecting to ${params.deviceName} ($targetIp)...")
+                        }
+                    }
+                    val transport = TcpTransferTransport(TransportType.WIFI_DIRECT)
+                    transport.connect(targetIp, params.port)
+                    connectedTransport = transport
+                    activeTransport = transport
+                    break
+                } catch (e: Exception) {
+                    Log.w(TAG, "Candidate connection failed for $targetIp:${params.port}: ${e.message}")
+                    lastConnectException = e
+                }
+            }
+
+            if (connectedTransport != null) {
                 withContext(Dispatchers.Main) {
                     _uiState.update {
                         it.copy(
@@ -382,16 +438,22 @@ class DropSendViewModel(
                             statusMessage = "Connected! Establishing encrypted handshake...",
                         )
                     }
-                    listenToIncomingMessages(transport)
-                    performSenderHandshake(transport, directDevice)
+                    listenToIncomingMessages(connectedTransport)
+                    performSenderHandshake(connectedTransport, directDevice)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed connecting to QR target ${params.ipAddress}:${params.port}", e)
+            } else {
+                Log.e(TAG, "Failed connecting to QR target ${params.deviceName} on any candidate IP", lastConnectException)
                 withContext(Dispatchers.Main) {
+                    val msg =
+                        if (params.ssid.isNotBlank() && !hotspotConnected) {
+                            "Could not connect to ${params.deviceName}'s Wi-Fi hotspot (${params.ssid}). Make sure both devices are nearby or connected to the same Wi-Fi network."
+                        } else {
+                            "Could not connect to ${params.deviceName}. Make sure DropSend receiver mode is open on the other device."
+                        }
                     _uiState.update {
                         it.copy(
                             sessionState = SessionState.FAILED,
-                            errorMessage = "Could not connect to ${params.deviceName}. Make sure both devices are nearby.",
+                            errorMessage = msg,
                         )
                     }
                 }

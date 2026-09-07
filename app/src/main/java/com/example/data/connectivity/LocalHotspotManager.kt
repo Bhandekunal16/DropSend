@@ -45,10 +45,10 @@ class LocalHotspotManager(
 
         private const val DEFAULT_IP = "192.168.43.1"
 
-        // Small number of retries because the interface can appear
+        // Retries to allow the interface to appear and bind
         // shortly after LocalOnlyHotspotCallback.onStarted().
-        private const val IP_LOOKUP_ATTEMPTS = 4
-        private const val IP_LOOKUP_DELAY_MS = 75L
+        private const val IP_LOOKUP_ATTEMPTS = 10
+        private const val IP_LOOKUP_DELAY_MS = 100L
     }
 
     private val appContext = context.applicationContext
@@ -204,11 +204,24 @@ class LocalHotspotManager(
                         reservation = null
                         starting.set(false)
 
+                        val errorMsg =
+                            when (reason) {
+                                WifiManager.LocalOnlyHotspotCallback.ERROR_NO_CHANNEL ->
+                                    "No Wi-Fi channel available for Direct Hotspot."
+                                WifiManager.LocalOnlyHotspotCallback.ERROR_TETHERING_DISALLOWED ->
+                                    "Hotspot is disallowed by device policy."
+                                WifiManager.LocalOnlyHotspotCallback.ERROR_INCOMPATIBLE_MODE ->
+                                    "Wi-Fi mode incompatible with Direct Hotspot."
+                                else ->
+                                    "Direct Hotspot unavailable on this device."
+                            }
+
                         publishFallback(
                             deviceId = deviceId,
                             deviceName = deviceName,
                             generation = currentGeneration,
                             onStarted = onStarted,
+                            errorMessage = errorMsg,
                         )
                     }
                 },
@@ -226,6 +239,7 @@ class LocalHotspotManager(
                 deviceName = deviceName,
                 generation = currentGeneration,
                 onStarted = onStarted,
+                errorMessage = "Direct Hotspot could not be started (${e.message ?: "unsupported"}).",
             )
         }
     }
@@ -352,15 +366,21 @@ class LocalHotspotManager(
     private fun isRelevantInterface(name: String): Boolean =
         name.startsWith("wlan") ||
             name.startsWith("ap") ||
+            name.startsWith("softap") ||
+            name.contains("softap") ||
+            name.contains("ap") ||
             name.startsWith("swlan") ||
             name.startsWith("p2p") ||
-            name.contains("hotspot")
+            name.contains("hotspot") ||
+            name.startsWith("rndis") ||
+            name.startsWith("wigig")
 
     private fun publishFallback(
         deviceId: String,
         deviceName: String,
         generation: Long,
         onStarted: ((LocalHotspotInfo) -> Unit)?,
+        errorMessage: String? = "Direct Hotspot unavailable on this device. Use same Wi-Fi / Radar mode.",
     ) {
         if (this.generation.get() != generation) {
             return
@@ -368,11 +388,13 @@ class LocalHotspotManager(
 
         val info =
             createHotspotInfo(
-                ssid = "DropSend-$deviceId",
-                pass = "dp_$deviceId",
-                ip = DEFAULT_IP,
+                ssid = "",
+                pass = "",
+                ip = "",
                 deviceId = deviceId,
                 deviceName = deviceName,
+                isActive = false,
+                errorMessage = errorMessage,
             )
 
         starting.set(false)
@@ -409,29 +431,39 @@ class LocalHotspotManager(
         ip: String,
         deviceId: String,
         deviceName: String,
+        isActive: Boolean = true,
         errorMessage: String? = null,
     ): LocalHotspotInfo {
-        val encodedSsid = ssid.encodeUri()
-        val encodedPass = pass.encodeUri()
         val encodedDeviceName = deviceName.encodeUri()
         val encodedDeviceId = deviceId.encodeUri()
 
         val dropsendPayload =
-            "dropsend://connect" +
-                "?ssid=$encodedSsid" +
-                "&pass=$encodedPass" +
-                "&ip=${ip.encodeUri()}" +
-                "&port=$DEFAULT_PORT" +
-                "&dev=$encodedDeviceName" +
-                "&id=$encodedDeviceId"
+            if (isActive && ssid.isNotBlank()) {
+                val encodedSsid = ssid.encodeUri()
+                val encodedPass = pass.encodeUri()
+                "dropsend://connect" +
+                    "?ssid=$encodedSsid" +
+                    "&pass=$encodedPass" +
+                    "&ip=${ip.encodeUri()}" +
+                    "&port=$DEFAULT_PORT" +
+                    "&dev=$encodedDeviceName" +
+                    "&id=$encodedDeviceId"
+            } else {
+                val ipParam = if (ip.isNotBlank()) "&ip=${ip.encodeUri()}" else ""
+                "dropsend://connect?port=$DEFAULT_PORT&dev=$encodedDeviceName&id=$encodedDeviceId$ipParam"
+            }
 
         val wifiPayload =
-            "WIFI:S:${ssid.escapeWifiQr()};" +
-                "T:WPA;" +
-                "P:${pass.escapeWifiQr()};;"
+            if (isActive && ssid.isNotBlank()) {
+                "WIFI:S:${ssid.escapeWifiQr()};" +
+                    "T:WPA;" +
+                    "P:${pass.escapeWifiQr()};;"
+            } else {
+                ""
+            }
 
         return LocalHotspotInfo(
-            isActive = true,
+            isActive = isActive,
             ssid = ssid,
             passphrase = pass,
             ipAddress = ip,
@@ -440,6 +472,27 @@ class LocalHotspotManager(
             standardWifiQr = wifiPayload,
             errorMessage = errorMessage,
         )
+    }
+
+    /**
+     * Builds a DropSend direct connection URI without requiring a local hotspot SSID.
+     * Ideal when connecting across a shared local Wi-Fi or router network.
+     */
+    fun buildDirectConnectPayload(
+        ip: String,
+        deviceId: String,
+        deviceName: String,
+        altIps: List<String> = emptyList(),
+    ): String {
+        val encodedDeviceName = deviceName.encodeUri()
+        val encodedDeviceId = deviceId.encodeUri()
+        val altParam =
+            if (altIps.isNotEmpty()) {
+                "&alt=" + altIps.joinToString(",") { it.encodeUri() }
+            } else {
+                ""
+            }
+        return "dropsend://connect?ip=${ip.encodeUri()}&port=$DEFAULT_PORT&dev=$encodedDeviceName&id=$encodedDeviceId$altParam"
     }
 
     fun stopLocalHotspot() {
@@ -468,13 +521,13 @@ class LocalHotspotManager(
         scope.cancel()
     }
 
-    private fun String.encodeUri(): String = URLEncoder.encode(this, Charsets.UTF_8.name())
+    internal fun String.encodeUri(): String = URLEncoder.encode(this, Charsets.UTF_8.name())
 
     /**
      * Wi-Fi QR specification requires escaping
      * \ ; , and :
      */
-    private fun String.escapeWifiQr(): String =
+    internal fun String.escapeWifiQr(): String =
         replace("\\", "\\\\")
             .replace(";", "\\;")
             .replace(",", "\\,")

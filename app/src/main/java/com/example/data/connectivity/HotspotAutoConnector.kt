@@ -24,6 +24,7 @@ data class QrConnectionParams(
     val port: Int = 8888,
     val deviceName: String = "Nearby Device",
     val deviceId: String = "",
+    val alternateIps: List<String> = emptyList(),
 )
 
 class HotspotAutoConnector(
@@ -58,6 +59,10 @@ class HotspotAutoConnector(
 
     @Volatile
     private var isProcessBound = false
+
+    @Volatile
+    var lastConnectedGatewayIp: String? = null
+        private set
 
     @VisibleForTesting
     internal val activeCallback: ConnectivityManager.NetworkCallback?
@@ -129,6 +134,17 @@ class HotspotAutoConnector(
                 uri.getQueryParameter("id")
                     ?: "REV-${ip.takeLast(4)}"
 
+            val altParam = uri.getQueryParameter("alt").orEmpty()
+            val alternateIps =
+                if (altParam.isNotBlank()) {
+                    altParam
+                        .split(",")
+                        .map { it.trim() }
+                        .filter(::isValidIpv4)
+                } else {
+                    emptyList()
+                }
+
             QrConnectionParams(
                 ssid = ssid,
                 passphrase = passphrase,
@@ -136,6 +152,7 @@ class HotspotAutoConnector(
                 port = port,
                 deviceName = deviceName,
                 deviceId = deviceId,
+                alternateIps = alternateIps,
             )
         } catch (e: Exception) {
             Log.w(TAG, "Failed to parse dropsend URI: ${e.message}")
@@ -547,6 +564,19 @@ class HotspotAutoConnector(
 
                 isProcessBound = true
 
+                try {
+                    val linkProps = cm.getLinkProperties(network)
+                    val gateway =
+                        linkProps?.routes?.firstOrNull { it.isDefaultRoute && it.gateway != null }?.gateway?.hostAddress
+                            ?: linkProps?.routes?.firstOrNull { it.gateway != null }?.gateway?.hostAddress
+                    if (!gateway.isNullOrBlank() && gateway != "0.0.0.0") {
+                        lastConnectedGatewayIp = gateway
+                        Log.d(TAG, "Discovered hotspot gateway IP: $gateway")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not extract gateway IP from LinkProperties: ${e.message}")
+                }
+
                 Log.d(
                     TAG,
                     "Receiver hotspot connected: $network",
@@ -668,6 +698,7 @@ class HotspotAutoConnector(
             )
         } finally {
             isProcessBound = false
+            lastConnectedGatewayIp = null
         }
     }
 

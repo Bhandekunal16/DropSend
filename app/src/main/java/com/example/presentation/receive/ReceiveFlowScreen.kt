@@ -201,9 +201,17 @@ fun ReceiveFlowScreen(
                     if (selectedTab == 0) {
                         // TAB 0: OFFLINE QR & DIRECT HOTSPOT MODE (NO SHARED ROUTER NEEDED)
                         val qrPayload =
-                            localHotspotInfo.connectionPayload.ifBlank {
-                                val ip = localIpAddresses.firstOrNull() ?: "192.168.43.1"
-                                "dropsend://connect?ssid=DropSend-$localDeviceId&pass=dp_$localDeviceId&ip=$ip&port=8888&dev=$localDeviceName&id=$localDeviceId"
+                            if (localHotspotInfo.isActive && localHotspotInfo.connectionPayload.isNotBlank()) {
+                                localHotspotInfo.connectionPayload
+                            } else {
+                                val primaryIp = localIpAddresses.firstOrNull() ?: localHotspotInfo.ipAddress.ifBlank { "192.168.43.1" }
+                                val altParam =
+                                    if (localIpAddresses.size > 1) {
+                                        "&alt=" + localIpAddresses.drop(1).joinToString(",")
+                                    } else {
+                                        ""
+                                    }
+                                "dropsend://connect?ip=$primaryIp&port=8888&dev=$localDeviceName&id=$localDeviceId$altParam"
                             }
 
                         QrCodeDisplay(
@@ -221,8 +229,15 @@ fun ReceiveFlowScreen(
 
                         Spacer(modifier = Modifier.height(4.dp))
 
+                        val explanationText =
+                            if (localHotspotInfo.isActive) {
+                                "Direct Hotspot is active. The sender taps 'Scan QR' in DropSend to connect directly without a router."
+                            } else {
+                                "Direct QR is active. The sender taps 'Scan QR' in DropSend to connect directly over local Wi-Fi."
+                            }
+
                         Text(
-                            text = "No shared Wi-Fi router needed! The sender taps 'Scan QR' in DropSend to connect directly.",
+                            text = explanationText,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -232,16 +247,21 @@ fun ReceiveFlowScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         // Hotspot / Direct Details Card
-                        val ssid = localHotspotInfo.ssid.ifBlank { "DropSend-$localDeviceId" }
-                        val pass = localHotspotInfo.passphrase.ifBlank { "dp_$localDeviceId" }
-                        val directIp = localHotspotInfo.ipAddress.ifBlank { localIpAddresses.firstOrNull() ?: "192.168.43.1" }
+                        val ssid = if (localHotspotInfo.isActive) localHotspotInfo.ssid else ""
+                        val pass = if (localHotspotInfo.isActive) localHotspotInfo.passphrase else ""
+                        val directIp =
+                            if (localHotspotInfo.isActive && localHotspotInfo.ipAddress.isNotBlank()) {
+                                localHotspotInfo.ipAddress
+                            } else {
+                                localIpAddresses.firstOrNull() ?: "192.168.43.1"
+                            }
                         val netStatus =
-                            if (localHotspotInfo.errorMessage != null) {
-                                DirectNetworkStatus.ERROR
-                            } else if (localHotspotInfo.isActive || ssid.isNotBlank()) {
+                            if (localHotspotInfo.errorMessage != null && !localHotspotInfo.isActive) {
+                                DirectNetworkStatus.AVAILABLE
+                            } else if (localHotspotInfo.isActive) {
                                 DirectNetworkStatus.AVAILABLE
                             } else {
-                                DirectNetworkStatus.STARTING
+                                DirectNetworkStatus.AVAILABLE
                             }
 
                         DirectNetworkCard(
@@ -249,7 +269,7 @@ fun ReceiveFlowScreen(
                             ipAddress = directIp,
                             passphrase = pass,
                             status = netStatus,
-                            errorMessage = localHotspotInfo.errorMessage,
+                            errorMessage = if (localHotspotInfo.isActive) null else localHotspotInfo.errorMessage,
                             modifier = Modifier.padding(horizontal = 4.dp),
                         )
                     } else {
